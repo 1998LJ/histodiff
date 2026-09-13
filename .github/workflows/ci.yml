@@ -33,8 +33,13 @@ jobs:
       - name: Test installed wheel outside the source tree
         run: |
           cd "${RUNNER_TEMP}"
-          python -c "import histodiff; assert histodiff.__version__ == '0.1.0'"
+          python -c "import importlib.metadata as m; import histodiff; assert histodiff.__version__ == m.version('histodiff')"
           histodiff --version
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python -c "import os, histodiff; assert os.environ['RELEASE_TAG'] == f'v{histodiff.__version__}'"
 
   test:
     runs-on: ${{ matrix.os }}

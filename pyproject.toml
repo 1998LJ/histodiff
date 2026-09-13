@@ -1,20 +1,20 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
 name = "histodiff"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Human-readable diffs for code and structured text with moved, repeated, or reformatted blocks"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "rmnvg" }]
 keywords = ["diff", "patience", "histogram", "myers", "difflib", "text"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -34,11 +34,16 @@ dev = ["build>=1", "hypothesis>=6", "mypy>=1.10", "pytest>=7", "ruff>=0.5"]
 
 [project.urls]
 Homepage = "https://github.com/rmnvg/histodiff"
+Documentation = "https://github.com/rmnvg/histodiff#readme"
+Changelog = "https://github.com/rmnvg/histodiff/blob/main/CHANGELOG.md"
 Issues = "https://github.com/rmnvg/histodiff/issues"
 Repository = "https://github.com/rmnvg/histodiff.git"
 
 [project.scripts]
 histodiff = "histodiff.cli:main"
+
+[tool.hatch.version]
+path = "src/histodiff/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/histodiff"]
