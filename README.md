@@ -107,6 +107,37 @@ ops = diff(old, new, algorithm="myers")   # equivalent to myers_diff(old, new)
 ops = diff(old, new, minimal=True)        # never trade diff size for speed
 ```
 
+### Coming from difflib
+
+`histodiff.SequenceMatcher` is a drop-in subclass of
+`difflib.SequenceMatcher`. Change the import and your existing code gets
+histodiff's alignment:
+
+```python
+# from difflib import SequenceMatcher
+from histodiff import SequenceMatcher
+
+sm = SequenceMatcher(None, old, new)      # same signature as difflib
+sm.get_opcodes()                          # [('equal', 0, 5, 0, 5), ...]
+sm.get_grouped_opcodes(3)                 # hunks, as in difflib
+sm.ratio()                                # similarity from the better alignment
+
+SequenceMatcher(None, old, new, algorithm="patience")   # pick an algorithm
+```
+
+Like difflib's, it works on any sequences of hashable items, including
+strings compared character by character. `get_diff_ops()` returns the same
+alignment as `DiffOp`s, which you can pass to `unified_diff`. A few
+deliberate differences:
+
+- `isjunk` items are never used as anchors, but can still be matched between
+  anchors.
+- `autojunk` is accepted but has no effect, because difflib's
+  frequent-line heuristic is what makes its large diffs poor.
+- `find_longest_match()` keeps difflib's behavior.
+
+To replace `difflib.unified_diff(a, b)`, use `unified_diff(diff(a, b))`.
+
 ### Command line
 
 ```bash

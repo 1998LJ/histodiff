@@ -21,13 +21,19 @@ __all__ = ["patience_diff"]
 
 
 def _unique_common(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
+    junk: frozenset[int],
 ) -> tuple[list[Match], bool]:
     """Return ``(pairs, has_common)``.
 
-    ``pairs`` holds ``(i, j)`` for every line occurring exactly once in
-    ``a[alo:ahi]`` and exactly once in ``b[blo:bhi]``, ordered by ``i``.
-    ``has_common`` says whether the regions share any line at all.
+    ``pairs`` holds ``(i, j)`` for every non-junk line occurring exactly
+    once in ``a[alo:ahi]`` and exactly once in ``b[blo:bhi]``, ordered by
+    ``i``. ``has_common`` says whether the regions share any line at all.
     """
     # line -> index of its only occurrence, or -1 once it repeats
     in_a: dict[int, int] = {}
@@ -41,7 +47,9 @@ def _unique_common(
             has_common = True
             in_b[line] = -1 if line in in_b else j
     pairs = [
-        (in_a[line], j) for line, j in in_b.items() if j != -1 and in_a[line] != -1
+        (in_a[line], j)
+        for line, j in in_b.items()
+        if j != -1 and in_a[line] != -1 and line not in junk
     ]
     pairs.sort()
     return pairs, has_common
@@ -83,10 +91,12 @@ def patience_matches(
     blo: int,
     bhi: int,
     minimal: bool = False,
+    junk: frozenset[int] = frozenset(),
 ) -> list[Match]:
     """Return (unsorted) matched ``(i, j)`` pairs for two regions.
 
-    ``minimal`` is passed to the Myers fallback.
+    ``minimal`` is passed to the Myers fallback. Lines in ``junk`` are never
+    used as anchors, though Myers may still match them in the gaps.
     """
     matches: list[Match] = []
     stack = [(alo, ahi, blo, bhi)]
@@ -95,7 +105,7 @@ def patience_matches(
         alo, ahi, blo, bhi = trim_common(a, alo, ahi, b, blo, bhi, matches)
         if alo == ahi or blo == bhi:
             continue
-        pairs, has_common = _unique_common(a, alo, ahi, b, blo, bhi)
+        pairs, has_common = _unique_common(a, alo, ahi, b, blo, bhi, junk)
         if not pairs:
             if has_common:
                 matches.extend(myers_matches(a, alo, ahi, b, blo, bhi, minimal))

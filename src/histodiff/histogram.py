@@ -38,11 +38,19 @@ MAX_CHAIN = 64
 
 
 def _find_run(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
+    junk: frozenset[int],
 ) -> tuple[tuple[int, int, int, int] | None, bool]:
     """Pick the best anchor run in the region.
 
-    Returns ``((a_start, a_end, b_start, b_end) or None, has_common)``.
+    Lines in ``junk`` can extend a run but never start one or count towards
+    its rarity. Returns ``((a_start, a_end, b_start, b_end) or None,
+    has_common)``.
     """
     occurrences: dict[int, list[int]] = {}
     for i in range(alo, ahi):
@@ -60,7 +68,7 @@ def _find_run(
         if occ is not None:
             has_common = True
             count = len(occ)
-            if count <= best_count:
+            if count <= best_count and b[j] not in junk:
                 idx = 0
                 while idx < count:
                     i = occ[idx]
@@ -72,10 +80,10 @@ def _find_run(
                     ):
                         a_start -= 1
                         b_start -= 1
-                        if rarity > 1:
+                        if rarity > 1 and a[a_start] not in junk:
                             rarity = min(rarity, len(occurrences[a[a_start]]))
                     while a_end < ahi and b_end < bhi and a[a_end] == b[b_end]:
-                        if rarity > 1:
+                        if rarity > 1 and a[a_end] not in junk:
                             rarity = min(rarity, len(occurrences[a[a_end]]))
                         a_end += 1
                         b_end += 1
@@ -107,10 +115,12 @@ def histogram_matches(
     blo: int,
     bhi: int,
     minimal: bool = False,
+    junk: frozenset[int] = frozenset(),
 ) -> list[Match]:
     """Return (unsorted) matched ``(i, j)`` pairs for two regions.
 
-    ``minimal`` is passed to the Myers fallback.
+    ``minimal`` is passed to the Myers fallback. Lines in ``junk`` never
+    start an anchor run, though they may extend one or be matched by Myers.
     """
     matches: list[Match] = []
     stack = [(alo, ahi, blo, bhi)]
@@ -119,7 +129,7 @@ def histogram_matches(
         alo, ahi, blo, bhi = trim_common(a, alo, ahi, b, blo, bhi, matches)
         if alo == ahi or blo == bhi:
             continue
-        run, has_common = _find_run(a, alo, ahi, b, blo, bhi)
+        run, has_common = _find_run(a, alo, ahi, b, blo, bhi, junk)
         if run is None:
             if has_common:
                 matches.extend(myers_matches(a, alo, ahi, b, blo, bhi, minimal))

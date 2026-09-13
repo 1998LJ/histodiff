@@ -103,8 +103,9 @@ def build_ops(a: Sequence[str], b: Sequence[str], matches: list[Match]) -> list[
     ]
 
 
-def _is_blank(line: str) -> bool:
-    return not line.strip()
+def _is_blank(line: object) -> bool:
+    # Items needn't be strings (e.g. SequenceMatcher on lists of tokens).
+    return isinstance(line, str) and not line.strip()
 
 
 def _position_score(seq: Sequence[str], start: int, end: int) -> tuple[int, int]:
@@ -118,7 +119,12 @@ def _position_score(seq: Sequence[str], start: int, end: int) -> tuple[int, int]
         _is_blank(seq[end - 1])
     )
     first = seq[start]
-    indent = 1 << 30 if _is_blank(first) else len(first) - len(first.lstrip())
+    if not isinstance(first, str):
+        indent = 0
+    elif _is_blank(first):
+        indent = 1 << 30
+    else:
+        indent = len(first) - len(first.lstrip())
     return boundary, -indent
 
 

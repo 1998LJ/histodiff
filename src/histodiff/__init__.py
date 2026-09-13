@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Callable
 
 from ._core import DiffOp
+from .compat import SequenceMatcher
 from .format import unified_diff
 from .histogram import histogram_diff
 from .myers import myers_diff
@@ -14,6 +15,7 @@ from .patience import patience_diff
 __all__ = [
     "ALGORITHMS",
     "DiffOp",
+    "SequenceMatcher",
     "diff",
     "histogram_diff",
     "myers_diff",
