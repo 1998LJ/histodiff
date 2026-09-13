@@ -26,9 +26,9 @@ run can replace a rarer one; the rule above is applied strictly.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Hashable, Sequence
 
-from ._core import DiffOp, Match, build_ops, intern_lines, trim_common
+from ._core import DiffOp, Match, T, build_ops, intern_items, trim_common
 from .myers import myers_matches
 
 __all__ = ["MAX_CHAIN", "histogram_diff"]
@@ -142,9 +142,16 @@ def histogram_matches(
 
 
 def histogram_diff(
-    a: Sequence[str], b: Sequence[str], *, minimal: bool = False
-) -> list[DiffOp]:
-    """Diff two sequences of lines with the histogram algorithm.
+    a: Sequence[T],
+    b: Sequence[T],
+    *,
+    minimal: bool = False,
+    key: Callable[[T], Hashable] | None = None,
+) -> list[DiffOp[T]]:
+    """Diff two sequences with the histogram algorithm.
+
+    Items are usually lines, but can be any hashable values; ``key`` works
+    as in :func:`histodiff.diff`.
 
     Like patience diff, but anchors on the rarest matching lines rather than
     only strictly unique ones, so it still produces readable output when
@@ -152,7 +159,7 @@ def histogram_diff(
     histodiff's default. ``minimal=True`` disables the cost cap of the
     Myers fallback (see :func:`histodiff.myers_diff`).
     """
-    ia, ib = intern_lines(a, b)
+    ia, ib = intern_items(a, b, key)
     matches = histogram_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
     matches.sort()
-    return build_ops(a, b, matches)
+    return build_ops(a, b, matches, ia, ib)

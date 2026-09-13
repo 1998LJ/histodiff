@@ -107,6 +107,37 @@ ops = diff(old, new, algorithm="myers")   # equivalent to myers_diff(old, new)
 ops = diff(old, new, minimal=True)        # never trade diff size for speed
 ```
 
+### Words, tokens and records
+
+`diff` works on any sequence of hashable items, not just lines:
+
+```python
+from histodiff import diff
+
+old = "the quick brown fox jumps".split()
+new = "the quick red fox jumped".split()
+[(op.tag, op.a_lines, op.b_lines) for op in diff(old, new) if op.tag != "equal"]
+# [('replace', ('brown',), ('red',)), ('replace', ('jumps',), ('jumped',))]
+
+diff([1, 2, 3, 4], [1, 3, 4, 5])          # numbers, tuples, named tuples,
+                                          # frozen dataclasses...
+```
+
+Pass `key` to compare items by a derived value, as with `sorted(key=...)`.
+The ops still hold your original items:
+
+```python
+diff(old_lines, new_lines, key=str.strip)       # ignore indentation/trailing spaces
+diff(old_words, new_words, key=str.casefold)    # ignore case
+
+# dicts aren't hashable, so compare them by their contents
+diff(old_rows, new_rows, key=lambda row: tuple(sorted(row.items())))
+```
+
+The algorithm functions (`myers_diff` and the rest) take the same `key`.
+`unified_diff` is a text format, so it only accepts ops whose items are
+strings.
+
 ### Coming from difflib
 
 `histodiff.SequenceMatcher` is a drop-in subclass of

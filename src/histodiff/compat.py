@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import difflib
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
-from ._core import DiffOp, build_ops, intern_lines
+from ._core import DiffOp, build_ops, intern_items
 from .histogram import histogram_matches
 from .myers import myers_matches
 from .patience import patience_matches
@@ -17,13 +17,13 @@ _ALGORITHMS = ("myers", "patience", "histogram")
 
 
 def _align(
-    a: Sequence[Hashable],
-    b: Sequence[Hashable],
+    a: Sequence[Any],
+    b: Sequence[Any],
     algorithm: str,
     minimal: bool,
     isjunk: Callable[[Any], bool] | None,
-) -> list[DiffOp]:
-    ia, ib = intern_lines(a, b)  # type: ignore[arg-type]
+) -> list[DiffOp[Any]]:
+    ia, ib = intern_items(a, b)
     if algorithm == "myers":
         # Myers has no anchors, so junk makes no difference to it.
         matches = myers_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
@@ -34,7 +34,7 @@ def _align(
         func = patience_matches if algorithm == "patience" else histogram_matches
         matches = func(ia, 0, len(ia), ib, 0, len(ib), minimal, junk)
     matches.sort()
-    return build_ops(a, b, matches)  # type: ignore[arg-type]
+    return build_ops(a, b, matches, ia, ib)
 
 
 class SequenceMatcher(difflib.SequenceMatcher):  # type: ignore[type-arg]
@@ -70,6 +70,12 @@ class SequenceMatcher(difflib.SequenceMatcher):  # type: ignore[type-arg]
     :param minimal: see :func:`histodiff.diff`.
     """
 
+    # Set by difflib.SequenceMatcher but missing from its type stubs.
+    a: Sequence[Any]
+    b: Sequence[Any]
+    isjunk: Callable[[Any], bool] | None
+    matching_blocks: list[difflib.Match] | None
+
     def __init__(
         self,
         isjunk: Callable[[Any], bool] | None = None,
@@ -87,7 +93,7 @@ class SequenceMatcher(difflib.SequenceMatcher):  # type: ignore[type-arg]
             )
         self.algorithm = algorithm
         self.minimal = minimal
-        self._diff_ops: list[DiffOp] | None = None
+        self._diff_ops: list[DiffOp[Any]] | None = None
         super().__init__(isjunk, a, b, autojunk)
 
     def set_seq1(self, a: Sequence[Any]) -> None:
@@ -98,7 +104,7 @@ class SequenceMatcher(difflib.SequenceMatcher):  # type: ignore[type-arg]
         super().set_seq2(b)
         self._diff_ops = None
 
-    def get_diff_ops(self) -> list[DiffOp]:
+    def get_diff_ops(self) -> list[DiffOp[Any]]:
         """The alignment as histodiff :class:`~histodiff.DiffOp` objects.
 
         Useful for :func:`histodiff.unified_diff`, which takes ops.

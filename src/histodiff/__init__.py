@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Callable
+from collections.abc import Hashable, Sequence
+from typing import Any, Callable
 
-from ._core import DiffOp
+from ._core import DiffOp, T
 from .compat import SequenceMatcher
 from .format import unified_diff
 from .histogram import histogram_diff
@@ -25,7 +25,7 @@ __all__ = [
 __version__ = "0.1.0"
 
 #: Algorithm name -> implementation, for :func:`diff` and the CLI.
-ALGORITHMS: dict[str, Callable[..., list[DiffOp]]] = {
+ALGORITHMS: dict[str, Callable[..., list[DiffOp[Any]]]] = {
     "myers": myers_diff,
     "patience": patience_diff,
     "histogram": histogram_diff,
@@ -33,24 +33,38 @@ ALGORITHMS: dict[str, Callable[..., list[DiffOp]]] = {
 
 
 def diff(
-    a: Sequence[str],
-    b: Sequence[str],
+    a: Sequence[T],
+    b: Sequence[T],
     algorithm: str = "histogram",
     *,
     minimal: bool = False,
-) -> list[DiffOp]:
-    """Diff two sequences of lines.
+    key: Callable[[T], Hashable] | None = None,
+) -> list[DiffOp[T]]:
+    """Diff two sequences.
 
-    :param a: the old lines.
-    :param b: the new lines.
+    The items are usually lines of text, but can be any hashable values:
+    words, tokens, numbers, tuples, named tuples, frozen dataclasses. They
+    are compared the way :class:`difflib.SequenceMatcher` compares them, by
+    hash and ``==``.
+
+    :param a: the old items.
+    :param b: the new items.
     :param algorithm: ``"histogram"`` (default), ``"patience"`` or ``"myers"``.
     :param minimal: never trade diff size for speed. By default Myers (and
         the Myers fallback inside patience and histogram) caps its search on
         large, very different inputs, like ``git diff`` does; with
         ``minimal=True`` it always finds the smallest edit script, which can
         take quadratic time.
+    :param key: compare ``key(item)`` instead of the items themselves, like
+        the ``key`` of :func:`sorted`. Use it to diff unhashable records
+        (``key=lambda row: tuple(sorted(row.items()))``) or to ignore
+        differences that don't matter (``key=str.strip``,
+        ``key=str.casefold``). It is called once per item. The ops still hold
+        the original items, so the two sides of an ``equal`` op may differ
+        in ways the key ignores.
     :returns: :class:`DiffOp` objects that together cover all of ``a`` and ``b``.
     :raises ValueError: if ``algorithm`` is not recognised.
+    :raises TypeError: if an item (or its key) is unhashable.
     """
     try:
         func = ALGORITHMS[algorithm]
@@ -59,4 +73,4 @@ def diff(
         raise ValueError(
             f"unknown algorithm {algorithm!r}; expected one of {choices}"
         ) from None
-    return func(a, b, minimal=minimal)
+    return func(a, b, minimal=minimal, key=key)

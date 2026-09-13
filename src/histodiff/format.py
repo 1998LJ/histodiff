@@ -50,7 +50,7 @@ def _group(codes: list[_Opcode], context: int) -> Iterator[list[_Opcode]]:
 
 
 def unified_diff(
-    ops: Iterable[DiffOp],
+    ops: Iterable[DiffOp[str]],
     context: int = 3,
     *,
     fromfile: str = "",
@@ -76,16 +76,27 @@ def unified_diff(
     :param ops: the result of :func:`histodiff.diff` or an algorithm function.
     :param context: number of unchanged lines shown around each change.
     :raises ValueError: if ``context`` is negative.
+    :raises TypeError: if the ops hold anything but strings; unified diff is
+        a text format, so convert other items first (e.g. with ``str``).
     """
     if context < 0:
         raise ValueError(f"context must be >= 0, got {context}")
+    ops = list(ops)
+    for op in ops:
+        for item in op.a_lines + op.b_lines:
+            if not isinstance(item, str):
+                raise TypeError(
+                    "unified_diff renders text, but the ops contain a "
+                    f"{type(item).__name__} item; diff strings, or convert "
+                    "items with str() first"
+                )
     return _unified_diff(
-        list(ops), context, fromfile, tofile, fromfiledate, tofiledate, lineterm
+        ops, context, fromfile, tofile, fromfiledate, tofiledate, lineterm
     )
 
 
 def _unified_diff(
-    ops: list[DiffOp],
+    ops: list[DiffOp[str]],
     context: int,
     fromfile: str,
     tofile: str,

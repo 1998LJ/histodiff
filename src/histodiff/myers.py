@@ -19,10 +19,10 @@ disable the cap.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Hashable, Sequence
 from math import isqrt
 
-from ._core import DiffOp, Match, build_ops, intern_lines, trim_common
+from ._core import DiffOp, Match, T, build_ops, intern_items, trim_common
 
 __all__ = ["MIN_COST", "max_cost", "myers_diff"]
 
@@ -165,9 +165,16 @@ def myers_matches(
 
 
 def myers_diff(
-    a: Sequence[str], b: Sequence[str], *, minimal: bool = False
-) -> list[DiffOp]:
-    """Diff two sequences of lines with Myers' algorithm.
+    a: Sequence[T],
+    b: Sequence[T],
+    *,
+    minimal: bool = False,
+    key: Callable[[T], Hashable] | None = None,
+) -> list[DiffOp[T]]:
+    """Diff two sequences with Myers' algorithm.
+
+    Items are usually lines, but can be any hashable values; ``key`` works
+    as in :func:`histodiff.diff`.
 
     Produces the smallest edit script (fewest inserted plus deleted lines)
     unless the inputs are large and very different, where the search is
@@ -178,7 +185,7 @@ def myers_diff(
     blank lines, which can shred a moved block into many small hunks. See
     :func:`histodiff.patience_diff` and :func:`histodiff.histogram_diff`.
     """
-    ia, ib = intern_lines(a, b)
+    ia, ib = intern_items(a, b, key)
     matches = myers_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
     matches.sort()
-    return build_ops(a, b, matches)
+    return build_ops(a, b, matches, ia, ib)

@@ -12,9 +12,9 @@ falls back to Myers.
 from __future__ import annotations
 
 from bisect import bisect_left
-from collections.abc import Sequence
+from collections.abc import Callable, Hashable, Sequence
 
-from ._core import DiffOp, Match, build_ops, intern_lines, trim_common
+from ._core import DiffOp, Match, T, build_ops, intern_items, trim_common
 from .myers import myers_matches
 
 __all__ = ["patience_diff"]
@@ -120,9 +120,16 @@ def patience_matches(
 
 
 def patience_diff(
-    a: Sequence[str], b: Sequence[str], *, minimal: bool = False
-) -> list[DiffOp]:
-    """Diff two sequences of lines with the patience algorithm.
+    a: Sequence[T],
+    b: Sequence[T],
+    *,
+    minimal: bool = False,
+    key: Callable[[T], Hashable] | None = None,
+) -> list[DiffOp[T]]:
+    """Diff two sequences with the patience algorithm.
+
+    Items are usually lines, but can be any hashable values; ``key`` works
+    as in :func:`histodiff.diff`.
 
     Lines unique to both sides are used as fixed anchors, which keeps moved
     or rewritten blocks together instead of matching incidental lines like
@@ -130,7 +137,7 @@ def patience_diff(
     ``minimal=True`` disables that fallback's cost cap
     (see :func:`histodiff.myers_diff`).
     """
-    ia, ib = intern_lines(a, b)
+    ia, ib = intern_items(a, b, key)
     matches = patience_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
     matches.sort()
-    return build_ops(a, b, matches)
+    return build_ops(a, b, matches, ia, ib)
