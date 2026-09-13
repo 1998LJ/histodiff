@@ -56,7 +56,10 @@ def _positive_int(value: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="histodiff",
-        description="Compare two files line by line and print a unified diff.",
+        description=(
+            "Create human-readable diffs for files with moved, repeated, "
+            "or reformatted blocks."
+        ),
         epilog="Exit status is 0 if the inputs are identical, 1 if they differ, "
         "2 on error.",
     )

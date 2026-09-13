@@ -1,4 +1,4 @@
-"""histodiff - alignment-aware diffing using Myers, patience and histogram."""
+"""Human-readable diffs for moved, repeated, or reformatted content."""
 
 from __future__ import annotations
 

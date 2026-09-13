@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "histodiff"
 version = "0.1.0"
-description = "Alignment-aware diffing for Python using patience and histogram algorithms"
+description = "Human-readable diffs for code and structured text with moved, repeated, or reformatted blocks"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"

@@ -1,6 +1,15 @@
 # histodiff
 
-histodiff produces clean, human-readable diffs even when content shifts position — using the same patience/histogram algorithms Git uses internally, unlike Python's built-in difflib.
+**Human-readable diffs for code and structured text containing moved, repeated,
+or reformatted blocks.**
+
+Use histodiff when Python's `difflib` turns a small structural change into a
+large, noisy diff. Its histogram alignment starts from distinctive lines, then
+readability cleanup keeps change boundaries natural. You can switch to patience
+or Myers alignment, detect moved blocks, highlight changed words, ignore
+whitespace, and render unified, side-by-side, HTML, or versioned JSON output.
+The same API works with text, tokens, and other Python sequences, includes a
+`difflib.SequenceMatcher`-compatible class, and has no runtime dependencies.
 
 ## Why
 
@@ -12,9 +21,9 @@ repeated boilerplate. `difflib.unified_diff` gives you no way to turn that
 off. Move one function to the bottom of a file, and difflib can end up
 reporting that almost the whole file was deleted and re-added.
 
-histodiff lines files up on their *distinctive* lines first: a function
-name, a section header, the one row of data that changed. Everything else
-falls into place around those. Moved code shows up as moved, a one-line
+By default, histodiff lines files up on their *distinctive* lines first: a
+function name, a section header, the one row of data that changed. Everything
+else falls into place around those. Moved code shows up as moved, a one-line
 change stays a one-line change, and change blocks start and end at natural
 boundaries such as blank lines rather than halfway through a block.
 
