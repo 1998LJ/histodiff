@@ -5,17 +5,20 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime
 
 from . import ALGORITHMS, __version__, diff
 from .format import unified_diff
 from .whitespace import ignore_all_space, ignore_space_change
+from .words import highlight_words, inline_word_diff
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
 CYAN = "\x1b[36m"
 BOLD = "\x1b[1m"
+REVERSE = "\x1b[7m"
+NO_REVERSE = "\x1b[27m"
 RESET = "\x1b[0m"
 NO_NEWLINE = "\\ No newline at end of file\n"
 
@@ -71,7 +74,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--color",
         action="store_true",
-        help="color the output with ANSI escapes (green additions, red deletions)",
+        help="color the output with ANSI escapes (green additions, red deletions, "
+        "changed words within replaced lines highlighted)",
+    )
+    parser.add_argument(
+        "--color-words",
+        action="store_true",
+        help="show replaced lines as one line with the deleted and inserted words "
+        "colored inline, like git diff --color-words (implies --color)",
     )
     parser.add_argument(
         "-U",
@@ -111,29 +121,108 @@ def _read(path: str) -> tuple[list[str], str]:
     return split_lines(text), mtime.strftime("%Y-%m-%d %H:%M:%S.%f %z")
 
 
-def _render(index: int, line: str, color: bool) -> str:
+def _split_ending(line: str) -> tuple[str, str]:
     if line.endswith("\r\n"):
-        body, ending = line[:-2], "\r\n"
-    elif line.endswith("\n"):
-        body, ending = line[:-1], "\n"
-    else:
-        body, ending = line, ""
+        return line[:-2], "\r\n"
+    if line.endswith("\n"):
+        return line[:-1], "\n"
+    return line, ""
 
-    if color:
-        # The first two lines are always the ---/+++ file headers; checking
-        # the index avoids mistaking a deleted "-- comment" line for one.
-        if index < 2:
-            body = f"{BOLD}{body}{RESET}"
-        elif body.startswith("@@"):
-            body = f"{CYAN}{body}{RESET}"
-        elif body.startswith("+"):
-            body = f"{GREEN}{body}{RESET}"
-        elif body.startswith("-"):
-            body = f"{RED}{body}{RESET}"
 
+def _finish(body: str, ending: str) -> str:
     if not ending:  # last line of a file that lacks a trailing newline
         return f"{body}\n{NO_NEWLINE}"
     return body + ending
+
+
+def _paint(color: str, text: str) -> str:
+    return f"{color}{text}{RESET}" if text else ""
+
+
+def render(
+    lines: Sequence[str], mode: str = "plain", algorithm: str = "histogram"
+) -> Iterator[str]:
+    """Turn unified diff lines into terminal output.
+
+    :param mode: ``"plain"``; ``"color"`` - red/green lines, with the changed
+        words of replaced lines in reverse video; or ``"words"`` - replaced
+        lines merged into one with words colored inline, like
+        ``git diff --color-words``.
+    :param algorithm: algorithm for the word-level diff.
+    """
+    i = 0
+    while i < len(lines):
+        body, ending = _split_ending(lines[i])
+        if mode == "plain":
+            yield _finish(body, ending)
+            i += 1
+        elif i < 2:
+            # The first two lines are always the ---/+++ file headers; checking
+            # the index avoids mistaking a deleted "-- comment" line for one.
+            yield _finish(_paint(BOLD, body), ending)
+            i += 1
+        elif body.startswith("@@"):
+            yield _finish(_paint(CYAN, body), ending)
+            i += 1
+        elif body[:1] in ("-", "+"):
+            # Inside a hunk, '-' lines directly followed by '+' lines are
+            # always a single replaced block.
+            j = i
+            while j < len(lines) and lines[j].startswith("-"):
+                j += 1
+            k = j
+            while k < len(lines) and lines[k].startswith("+"):
+                k += 1
+            yield from _render_change(lines[i:j], lines[j:k], mode, algorithm)
+            i = k
+        else:  # context line
+            if mode == "words":
+                yield body[1:] + (ending or "\n")
+            else:
+                yield _finish(body, ending)
+            i += 1
+
+
+def _render_change(
+    old: Sequence[str], new: Sequence[str], mode: str, algorithm: str
+) -> Iterator[str]:
+    old_parts = [_split_ending(line[1:]) for line in old]
+    new_parts = [_split_ending(line[1:]) for line in new]
+    old_bodies = [body for body, _ in old_parts]
+    new_bodies = [body for body, _ in new_parts]
+
+    if mode == "words":
+        if old_bodies and new_bodies:
+            pieces = []
+            for tag, text in inline_word_diff(old_bodies, new_bodies,
+                                              algorithm=algorithm):
+                color = {"equal": "", "delete": RED, "insert": GREEN}[tag]
+                # Color each physical line separately so pagers stay tidy.
+                pieces.append("\n".join(
+                    _paint(color, part) if color else part
+                    for part in text.split("\n")
+                ))
+            yield "".join(pieces) + "\n"
+        else:
+            color = RED if old_bodies else GREEN
+            for body in old_bodies or new_bodies:
+                yield _paint(color, body) + "\n"
+        return
+
+    highlights = highlight_words(old_bodies, new_bodies, algorithm=algorithm)
+    for sign, color, parts, side in (
+        ("-", RED, old_parts, 0),
+        ("+", GREEN, new_parts, 1),
+    ):
+        for number, (body, ending) in enumerate(parts):
+            if highlights is None:
+                text = body
+            else:
+                text = "".join(
+                    f"{REVERSE}{piece}{NO_REVERSE}" if changed else piece
+                    for piece, changed in highlights[side][number]
+                )
+            yield _finish(f"{color}{sign}{text}{RESET}", ending)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -168,9 +257,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not lines:
         return 0
 
+    mode = "words" if args.color_words else "color" if args.color else "plain"
     try:
-        for index, line in enumerate(lines):
-            sys.stdout.write(_render(index, line, args.color))
+        for chunk in render(lines, mode, args.algorithm):
+            sys.stdout.write(chunk)
         sys.stdout.flush()
     except BrokenPipeError:
         # The reader went away (e.g. `histodiff a b | head`). Point stdout at

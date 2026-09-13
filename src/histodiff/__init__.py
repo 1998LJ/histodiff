@@ -12,17 +12,21 @@ from .histogram import histogram_diff
 from .myers import myers_diff
 from .patience import patience_diff
 from .whitespace import ignore_all_space, ignore_space_change
+from .words import highlight_words, inline_word_diff, split_words
 
 __all__ = [
     "ALGORITHMS",
     "DiffOp",
     "SequenceMatcher",
     "diff",
+    "highlight_words",
     "histogram_diff",
     "ignore_all_space",
     "ignore_space_change",
+    "inline_word_diff",
     "myers_diff",
     "patience_diff",
+    "split_words",
     "unified_diff",
 ]
 __version__ = "0.1.0"

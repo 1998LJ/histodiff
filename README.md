@@ -133,6 +133,25 @@ print("".join(unified_diff(ops, ignore_blank_lines=True)))   # like diff -B
 Lines that matched are printed as they appear in the old file, as GNU diff
 prints them.
 
+### Changed words within lines
+
+The word highlighting behind `--color` is also available from Python:
+
+```python
+from histodiff import highlight_words, inline_word_diff
+
+highlight_words(["x = process(a)"], ["x = process_v2(a)"])
+# ([[('x = ', False), ('process', True), ('(a)', False)]],
+#  [[('x = ', False), ('process_v2', True), ('(a)', False)]])
+
+inline_word_diff(["x = process(a)"], ["x = process_v2(a)"])
+# [('equal', 'x = '), ('delete', 'process'), ('insert', 'process_v2'), ('equal', '(a)')]
+```
+
+Both take the lines of a replaced block without line endings. Words are
+compared across the whole block, so a word that moved to the next line still
+matches.
+
 ### Words, tokens and records
 
 `diff` works on any sequence of hashable items, not just lines:
@@ -200,7 +219,8 @@ To replace `difflib.unified_diff(a, b)`, use `unified_diff(diff(a, b))`.
 ```bash
 histodiff old.py new.py                           # unified diff, histogram algorithm
 histodiff old.py new.py --algorithm patience
-histodiff old.py new.py --color                   # green additions, red deletions
+histodiff old.py new.py --color                   # green/red, changed words highlighted
+histodiff old.py new.py --color-words             # changed words inline, like git
 histodiff old.py new.py -U 10                     # 10 lines of context
 histodiff old.py new.py -b                        # ignore changes in amount of whitespace
 histodiff old.py new.py -w                        # ignore all whitespace
@@ -208,6 +228,14 @@ histodiff old.py new.py -B                        # ignore changes that are only
 histodiff old.py new.py --minimal                 # smallest diff, however long it takes
 cat new.py | histodiff old.py -                   # '-' reads stdin
 ```
+
+With `--color`, when lines are replaced the words that actually changed are
+shown in reverse video, so `result = process(event)` →
+`result = process_v2(event)` highlights just `process` and `process_v2`.
+Lines that share less than half their text aren't highlighted, since nearly
+everything would be. `--color-words` goes further, like
+`git diff --color-words`: each replaced block is printed once, with deleted
+words in red and inserted words in green.
 
 As with `diff`, the exit status is 0 when the files are identical (or differ
 only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:
