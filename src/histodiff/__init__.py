@@ -9,6 +9,7 @@ from ._core import DiffOp, T
 from .compat import SequenceMatcher
 from .format import unified_diff
 from .histogram import histogram_diff
+from .moves import Move, find_moves
 from .myers import myers_diff
 from .patience import patience_diff
 from .whitespace import ignore_all_space, ignore_space_change
@@ -17,8 +18,10 @@ from .words import highlight_words, inline_word_diff, split_words
 __all__ = [
     "ALGORITHMS",
     "DiffOp",
+    "Move",
     "SequenceMatcher",
     "diff",
+    "find_moves",
     "highlight_words",
     "histogram_diff",
     "ignore_all_space",

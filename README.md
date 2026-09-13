@@ -152,6 +152,24 @@ Both take the lines of a replaced block without line endings. Words are
 compared across the whole block, so a word that moved to the next line still
 matches.
 
+### Moved blocks
+
+`find_moves` pairs each deleted block with the identical block that was
+inserted somewhere else:
+
+```python
+from histodiff import diff, find_moves
+
+for move in find_moves(diff(old, new)):
+    print(f"lines {move.a_start + 1}-{move.a_end} moved to "
+          f"{move.b_start + 1}-{move.b_end}")
+```
+
+Each `Move` holds the positions on both sides plus the lines themselves
+(`a_lines`, `b_lines`). Pass `min_alnum=` to change the size threshold, or
+`key=` to match moved lines the same way the diff did, for example
+`key=ignore_all_space`.
+
 ### Words, tokens and records
 
 `diff` works on any sequence of hashable items, not just lines:
@@ -221,6 +239,8 @@ histodiff old.py new.py                           # unified diff, histogram algo
 histodiff old.py new.py --algorithm patience
 histodiff old.py new.py --color                   # green/red, changed words highlighted
 histodiff old.py new.py --color-words             # changed words inline, like git
+histodiff old.py new.py --color-moved             # moved blocks in their own colors
+histodiff old.py new.py --dim-moved               # moved blocks dimmed
 histodiff old.py new.py -U 10                     # 10 lines of context
 histodiff old.py new.py -b                        # ignore changes in amount of whitespace
 histodiff old.py new.py -w                        # ignore all whitespace
@@ -236,6 +256,15 @@ Lines that share less than half their text aren't highlighted, since nearly
 everything would be. `--color-words` goes further, like
 `git diff --color-words`: each replaced block is printed once, with deleted
 words in red and inserted words in green.
+
+`--color-moved` works like `git diff --color-moved`. When a deleted block
+reappears unchanged somewhere else, both copies are shown in their own
+colors: bold magenta where the block was removed, bold cyan where it was
+added. If two moved blocks sit right next to each other, the second one
+switches to blue and yellow so you can see where one ends and the next
+begins. `--dim-moved` uses faint versions of those colors, so moved code
+fades into the background and real edits stand out. Blocks need at least 20
+letters or digits to count, so a moved `}` or blank line isn't flagged.
 
 As with `diff`, the exit status is 0 when the files are identical (or differ
 only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:

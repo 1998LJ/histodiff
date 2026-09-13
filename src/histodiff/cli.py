@@ -4,19 +4,25 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime
 
 from . import ALGORITHMS, __version__, diff
 from .format import unified_diff
+from .moves import Move, find_moves
 from .whitespace import ignore_all_space, ignore_space_change
 from .words import highlight_words, inline_word_diff
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
+YELLOW = "\x1b[33m"
+BLUE = "\x1b[34m"
+MAGENTA = "\x1b[35m"
 CYAN = "\x1b[36m"
 BOLD = "\x1b[1m"
+DIM = "\x1b[2m"
 REVERSE = "\x1b[7m"
 NO_REVERSE = "\x1b[27m"
 RESET = "\x1b[0m"
@@ -84,6 +90,18 @@ def build_parser() -> argparse.ArgumentParser:
         "colored inline, like git diff --color-words (implies --color)",
     )
     parser.add_argument(
+        "--color-moved",
+        action="store_true",
+        help="color blocks that moved without changing differently from real "
+        "changes, like git diff --color-moved (implies --color)",
+    )
+    parser.add_argument(
+        "--dim-moved",
+        action="store_true",
+        help="like --color-moved, but dim the moved blocks so real changes "
+        "stand out (implies --color)",
+    )
+    parser.add_argument(
         "-U",
         "--unified",
         dest="context",
@@ -139,8 +157,50 @@ def _paint(color: str, text: str) -> str:
     return f"{color}{text}{RESET}" if text else ""
 
 
+_HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def _range_start(beginning: str, length: str | None) -> int:
+    """0-based index of the first line of a unified-diff ``start,length``."""
+    count = 1 if length is None else int(length)
+    # Empty ranges name the line *before* the insertion point.
+    return int(beginning) - 1 if count else int(beginning)
+
+
+def _move_colors(
+    moves: Sequence[Move], dim: bool
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Color for every moved line, keyed by its index in the old/new file.
+
+    Like Git's "zebra" mode, a moved block that directly follows another
+    moved block on the same side gets the alternative color, so the boundary
+    between them stays visible.
+    """
+    style = DIM if dim else BOLD
+    old_colors: dict[int, str] = {}
+    new_colors: dict[int, str] = {}
+    sides = (
+        ([(m.a_start, m.a_end) for m in moves], old_colors, (MAGENTA, BLUE)),
+        ([(m.b_start, m.b_end) for m in moves], new_colors, (CYAN, YELLOW)),
+    )
+    for spans, colors, palette in sides:
+        parity, previous_end = 0, -1
+        for start, end in sorted(spans):
+            if start == end:
+                continue
+            parity = 1 - parity if start == previous_end else 0
+            for index in range(start, end):
+                colors[index] = style + palette[parity]
+            previous_end = end
+    return old_colors, new_colors
+
+
 def render(
-    lines: Sequence[str], mode: str = "plain", algorithm: str = "histogram"
+    lines: Sequence[str],
+    mode: str = "plain",
+    algorithm: str = "histogram",
+    moves: Sequence[Move] = (),
+    dim_moved: bool = False,
 ) -> Iterator[str]:
     """Turn unified diff lines into terminal output.
 
@@ -149,7 +209,12 @@ def render(
         lines merged into one with words colored inline, like
         ``git diff --color-words``.
     :param algorithm: algorithm for the word-level diff.
+    :param moves: moved blocks (from :func:`histodiff.find_moves`) to show in
+        their own colors. Ignored in plain mode.
+    :param dim_moved: dim moved blocks instead of making them bold.
     """
+    old_colors, new_colors = _move_colors(moves, dim_moved)
+    old_next = new_next = 0  # index of the next old/new line in the files
     i = 0
     while i < len(lines):
         body, ending = _split_ending(lines[i])
@@ -162,6 +227,10 @@ def render(
             yield _finish(_paint(BOLD, body), ending)
             i += 1
         elif body.startswith("@@"):
+            match = _HUNK.match(body)
+            if match:
+                old_next = _range_start(match[1], match[2])
+                new_next = _range_start(match[3], match[4])
             yield _finish(_paint(CYAN, body), ending)
             i += 1
         elif body[:1] in ("-", "+"):
@@ -173,25 +242,52 @@ def render(
             k = j
             while k < len(lines) and lines[k].startswith("+"):
                 k += 1
-            yield from _render_change(lines[i:j], lines[j:k], mode, algorithm)
+            yield from _render_change(
+                lines[i:j],
+                lines[j:k],
+                mode,
+                algorithm,
+                [old_colors.get(old_next + n) for n in range(j - i)],
+                [new_colors.get(new_next + n) for n in range(k - j)],
+            )
+            old_next += j - i
+            new_next += k - j
             i = k
         else:  # context line
             if mode == "words":
                 yield body[1:] + (ending or "\n")
             else:
                 yield _finish(body, ending)
+            old_next += 1
+            new_next += 1
             i += 1
 
 
 def _render_change(
-    old: Sequence[str], new: Sequence[str], mode: str, algorithm: str
+    old: Sequence[str],
+    new: Sequence[str],
+    mode: str,
+    algorithm: str,
+    old_moved: Sequence[str | None],
+    new_moved: Sequence[str | None],
 ) -> Iterator[str]:
+    """Render one block of '-' lines and the '+' lines that follow it.
+
+    ``old_moved``/``new_moved`` hold each line's move color, or ``None``.
+    Moved lines are shown whole in that color; only the remaining lines are
+    compared word by word.
+    """
     old_parts = [_split_ending(line[1:]) for line in old]
     new_parts = [_split_ending(line[1:]) for line in new]
-    old_bodies = [body for body, _ in old_parts]
-    new_bodies = [body for body, _ in new_parts]
+    old_plain = [n for n, color in enumerate(old_moved) if color is None]
+    new_plain = [n for n, color in enumerate(new_moved) if color is None]
+    old_bodies = [old_parts[n][0] for n in old_plain]
+    new_bodies = [new_parts[n][0] for n in new_plain]
 
     if mode == "words":
+        for (body, _), color in zip(old_parts, old_moved):
+            if color:
+                yield _paint(color, body) + "\n"
         if old_bodies and new_bodies:
             pieces = []
             for tag, text in inline_word_diff(old_bodies, new_bodies,
@@ -207,20 +303,28 @@ def _render_change(
             color = RED if old_bodies else GREEN
             for body in old_bodies or new_bodies:
                 yield _paint(color, body) + "\n"
+        for (body, _), color in zip(new_parts, new_moved):
+            if color:
+                yield _paint(color, body) + "\n"
         return
 
     highlights = highlight_words(old_bodies, new_bodies, algorithm=algorithm)
-    for sign, color, parts, side in (
-        ("-", RED, old_parts, 0),
-        ("+", GREEN, new_parts, 1),
+    for sign, color, parts, moved, plain, side in (
+        ("-", RED, old_parts, old_moved, old_plain, 0),
+        ("+", GREEN, new_parts, new_moved, new_plain, 1),
     ):
+        position = {number: p for p, number in enumerate(plain)}
         for number, (body, ending) in enumerate(parts):
+            move_color = moved[number]
+            if move_color:
+                yield _finish(f"{move_color}{sign}{body}{RESET}", ending)
+                continue
             if highlights is None:
                 text = body
             else:
                 text = "".join(
                     f"{REVERSE}{piece}{NO_REVERSE}" if changed else piece
-                    for piece, changed in highlights[side][number]
+                    for piece, changed in highlights[side][position[number]]
                 )
             yield _finish(f"{color}{sign}{text}{RESET}", ending)
 
@@ -257,9 +361,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not lines:
         return 0
 
-    mode = "words" if args.color_words else "color" if args.color else "plain"
+    show_moves = args.color_moved or args.dim_moved
+    # Match moved lines the same way the diff matched lines.
+    moves = find_moves(ops, key=key) if show_moves else []
+    if args.color_words:
+        mode = "words"
+    elif args.color or show_moves:
+        mode = "color"
+    else:
+        mode = "plain"
     try:
-        for chunk in render(lines, mode, args.algorithm):
+        for chunk in render(lines, mode, args.algorithm, moves, args.dim_moved):
             sys.stdout.write(chunk)
         sys.stdout.flush()
     except BrokenPipeError:
