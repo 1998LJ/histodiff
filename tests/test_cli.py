@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from histodiff.cli import GREEN, NO_NEWLINE, RED, RESET, main, split_lines
+from samples import FROBNITZ_NEW, FROBNITZ_OLD
+
+
+def write(path: Path, lines: list[str], trailing_newline: bool = True) -> str:
+    # Bytes, so Windows doesn't turn "\n" into "\r\n" behind our back.
+    text = "\n".join(lines) + ("\n" if trailing_newline else "")
+    path.write_bytes(text.encode("utf-8"))
+    return str(path)
+
+
+@pytest.fixture
+def files(tmp_path: Path) -> tuple[str, str]:
+    old = write(tmp_path / "old.c", FROBNITZ_OLD)
+    new = write(tmp_path / "new.c", FROBNITZ_NEW)
+    return old, new
+
+
+def test_prints_unified_diff_and_exits_1(files, capsys) -> None:
+    old, new = files
+    assert main([old, new]) == 1
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[0].startswith(f"--- {old}\t")
+    assert lines[1].startswith(f"+++ {new}\t")
+    # With 3 lines of context, every change merges into one hunk.
+    assert "@@ -1,26 +1,25 @@" in lines
+    assert "+int fib(int n)" in lines
+    assert "-int fact(int n)" in lines
+
+
+def test_identical_files_exit_0(tmp_path, capsys) -> None:
+    a = write(tmp_path / "a", ["same"])
+    b = write(tmp_path / "b", ["same"])
+    assert main([a, b]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_missing_file_exits_2(tmp_path, capsys) -> None:
+    a = write(tmp_path / "a", ["x"])
+    assert main([a, str(tmp_path / "nope")]) == 2
+    assert "nope" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("algorithm", ["myers", "patience", "histogram"])
+def test_algorithm_flag(files, capsys, algorithm) -> None:
+    old, new = files
+    assert main([old, new, "--algorithm", algorithm, "-U", "0"]) == 1
+    out = capsys.readouterr().out.splitlines()
+    changed = [
+        line for line in out
+        if line[:1] in "+-" and not line.startswith(("+++", "---"))
+    ]
+    hunks = [line for line in out if line.startswith("@@")]
+    # All three change 21 lines here, but Myers interleaves fact() and fib()
+    # across 9 hunks while patience/histogram keep each function whole.
+    assert len(changed) == 21
+    assert len(hunks) == (9 if algorithm == "myers" else 4)
+
+
+def test_bad_algorithm_is_a_usage_error(files) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main([*files, "--algorithm", "lcs"])
+    assert exc.value.code == 2
+
+
+def test_color(files, capsys) -> None:
+    assert main([*files, "--color"]) == 1
+    out = capsys.readouterr().out
+    assert f"{GREEN}+int fib(int n){RESET}\n" in out
+    assert f"{RED}-int fact(int n){RESET}\n" in out
+
+
+def test_no_color_by_default(files, capsys) -> None:
+    main(list(files))
+    assert "\x1b[" not in capsys.readouterr().out
+
+
+def test_context_flag(files, capsys) -> None:
+    assert main([*files, "-U", "0"]) == 1
+    out = capsys.readouterr().out
+    assert " #include <stdio.h>" not in out
+    with pytest.raises(SystemExit):
+        main([*files, "-U", "-1"])
+
+
+def test_missing_trailing_newline_marker(tmp_path, capsys) -> None:
+    a = write(tmp_path / "a", ["x", "y"])
+    b = write(tmp_path / "b", ["x", "y"], trailing_newline=False)
+    assert main([a, b]) == 1
+    out = capsys.readouterr().out
+    assert out.endswith(f"-y\n+y\n{NO_NEWLINE}")
+
+
+def test_preserves_crlf(tmp_path, capsys) -> None:
+    (tmp_path / "a").write_bytes(b"one\r\ntwo\r\n")
+    (tmp_path / "b").write_bytes(b"one\r\n2\r\n")
+    assert main([str(tmp_path / "a"), str(tmp_path / "b")]) == 1
+    assert capsys.readouterr().out.endswith(" one\r\n-two\r\n+2\r\n")
+
+
+def test_stdin(tmp_path, monkeypatch, capsys) -> None:
+    import io
+
+    a = write(tmp_path / "a", ["x"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))
+    assert main([a, "-"]) == 1
+    assert capsys.readouterr().out.endswith("-x\n+y\n")
+
+
+def test_split_lines() -> None:
+    assert split_lines("") == []
+    assert split_lines("a\nb") == ["a\n", "b"]
+    assert split_lines("a\n\n") == ["a\n", "\n"]
+    assert split_lines("page\x0cbreak\n") == ["page\x0cbreak\n"]
+
+
+def test_python_dash_m(files) -> None:
+    result = subprocess.run(
+        [sys.executable, "-m", "histodiff", *files],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "+int fib(int n)" in result.stdout
