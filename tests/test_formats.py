@@ -343,6 +343,16 @@ def test_json_round_trip() -> None:
     assert from_json(to_json(numbers)) == numbers
 
 
+def test_from_json_ignores_unknown_optional_fields() -> None:
+    ops = diff(["old"], ["new"])
+    document = json.loads(to_json(ops))
+    document["future"] = {"nested": [1, 2, 3]}
+    document["old"]["future"] = True
+    document["new"]["future"] = None
+    document["ops"][0]["future"] = "value"
+    assert from_json(json.dumps(document)) == ops
+
+
 def test_json_without_lines() -> None:
     ops = diff(["a"], ["b"])
     doc = json.loads(to_json(ops, include_lines=False))

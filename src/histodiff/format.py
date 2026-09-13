@@ -483,6 +483,9 @@ def to_json(
 def from_json(data: str | bytes) -> list[DiffOp[Any]]:
     """Rebuild :class:`DiffOp` objects from :func:`to_json` output.
 
+    Unknown fields are ignored so versioned documents can gain optional fields
+    without breaking existing readers.
+
     :raises ValueError: if the document isn't structurally valid histodiff JSON
         of a supported version, its operations do not tile the declared input
         ranges, or it was written without lines.

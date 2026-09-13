@@ -291,6 +291,31 @@ deliberate differences:
 
 To replace `difflib.unified_diff(a, b)`, use `unified_diff(diff(a, b))`.
 
+## API stability
+
+histodiff is still in its `0.x` series, but the following interfaces are safe
+to build against:
+
+- Every name listed in `histodiff.__all__` is public. Public names will not be
+  removed without a documented deprecation period. Modules whose names begin
+  with `_` are internal and should not be imported directly; only objects they
+  expose through the top-level `histodiff.__all__` API are public.
+- `DiffOp` is a public data model. Its `tag`, `a_start`, `a_end`, `b_start`,
+  `b_end`, `a_lines`, and `b_lines` fields retain the meanings documented
+  above, including 0-based, half-open ranges.
+- Valid JSON documents with `"version": 1` will remain readable by future
+  histodiff releases. New optional fields may be added without increasing the
+  schema version. Consumers, including `from_json()`, must ignore fields they
+  do not recognize.
+- Exact diff alignment is not frozen. A minor `0.x` release may choose different
+  valid boundaries for ambiguous input as the readability heuristics improve.
+  Code should rely on the documented operations and their ability to transform
+  the old sequence into the new one, rather than snapshotting a particular
+  ambiguous alignment.
+- CLI exit status is part of the public contract: `0` means no effective
+  differences, `1` means differences were found, and `2` means an error
+  prevented comparison.
+
 ### Command line
 
 ```bash
