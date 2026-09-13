@@ -170,6 +170,40 @@ Each `Move` holds the positions on both sides plus the lines themselves
 `key=` to match moved lines the same way the diff did, for example
 `key=ignore_all_space`.
 
+### Other output formats
+
+```python
+from histodiff import diff, from_json, html_diff, side_by_side, to_json
+
+ops = diff(old, new)
+
+print("".join(side_by_side(ops, width=100)))             # like diff -y
+
+with open("diff.html", "w") as page:
+    page.write(html_diff(ops, fromfile="old.py", tofile="new.py"))
+
+payload = to_json(ops, fromfile="old.py", tofile="new.py", indent=2)
+assert from_json(payload) == ops
+```
+
+- `side_by_side_rows(ops)` gives you the paired rows, with a mark, both
+  line numbers and both texts, if you want to lay them out yourself.
+- `html_diff(..., full_page=False)` returns just the `<table>`. You can embed
+  it in your own page along with `HTML_STYLE`.
+- The JSON is a versioned object:
+
+  ```json
+  {"version": 1, "algorithm": "histogram",
+   "old": {"path": "old.py", "length": 12}, "new": {"path": "new.py", "length": 13},
+   "ops": [{"tag": "replace", "a_start": 4, "a_end": 5, "b_start": 4, "b_end": 6,
+            "a_lines": ["..."], "b_lines": ["...", "..."]}],
+   "moves": [{"a_start": 0, "a_end": 3, "b_start": 10, "b_end": 13, "a_lines": [...], "b_lines": [...]}]}
+  ```
+
+  Indices are 0-based and ranges are half-open, as in `DiffOp`. Pass
+  `include_lines=False` to leave out the text, and `moves=` to include
+  moved blocks.
+
 ### Words, tokens and records
 
 `diff` works on any sequence of hashable items, not just lines:
@@ -241,6 +275,9 @@ histodiff old.py new.py --color                   # green/red, changed words hig
 histodiff old.py new.py --color-words             # changed words inline, like git
 histodiff old.py new.py --color-moved             # moved blocks in their own colors
 histodiff old.py new.py --dim-moved               # moved blocks dimmed
+histodiff old.py new.py -y -W 160                 # side by side, 160 columns wide
+histodiff old.py new.py --html > diff.html        # standalone HTML page
+histodiff old.py new.py --json | jq '.moves'      # machine-readable ops and moves
 histodiff old.py new.py -U 10                     # 10 lines of context
 histodiff old.py new.py -b                        # ignore changes in amount of whitespace
 histodiff old.py new.py -w                        # ignore all whitespace
@@ -265,6 +302,15 @@ switches to blue and yellow so you can see where one ends and the next
 begins. `--dim-moved` uses faint versions of those colors, so moved code
 fades into the background and real edits stand out. Blocks need at least 20
 letters or digits to count, so a moved `}` or blank line isn't flagged.
+
+`-y` prints two columns like `diff -y`. Changed pairs are marked `|`, and
+lines on only one side are marked `<` or `>`. Add `--suppress-common-lines`
+to see only the changes. It works with `--color`, `--color-moved` and
+`--dim-moved`. `--html` writes a self-contained side-by-side page with line
+numbers and word highlighting, which follows the reader's light or dark
+theme; `-U` controls its context. `--json` prints the diff operations,
+including their lines, and any moved blocks, for other tools to consume.
+These formats print output even when the files are identical.
 
 As with `diff`, the exit status is 0 when the files are identical (or differ
 only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:

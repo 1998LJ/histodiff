@@ -6,11 +6,13 @@ import argparse
 import os
 import re
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import datetime
 
 from . import ALGORITHMS, __version__, diff
-from .format import unified_diff
+from ._core import DiffOp
+from .format import side_by_side_rows, to_json, unified_diff
+from .html_format import html_diff
 from .moves import Move, find_moves
 from .whitespace import ignore_all_space, ignore_space_change
 from .words import highlight_words, inline_word_diff
@@ -33,6 +35,13 @@ def _non_negative_int(value: str) -> int:
     number = int(value)
     if number < 0:
         raise argparse.ArgumentTypeError(f"must be >= 0, got {value}")
+    return number
+
+
+def _positive_int(value: str) -> int:
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {value}")
     return number
 
 
@@ -83,11 +92,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="color the output with ANSI escapes (green additions, red deletions, "
         "changed words within replaced lines highlighted)",
     )
-    parser.add_argument(
+    output = parser.add_argument_group("output format")
+    formats = output.add_mutually_exclusive_group()
+    formats.add_argument(
         "--color-words",
         action="store_true",
         help="show replaced lines as one line with the deleted and inserted words "
         "colored inline, like git diff --color-words (implies --color)",
+    )
+    formats.add_argument(
+        "-y",
+        "--side-by-side",
+        action="store_true",
+        help="output in two columns, like diff -y",
+    )
+    formats.add_argument(
+        "--html",
+        action="store_true",
+        help="output a standalone HTML page with a side-by-side diff",
+    )
+    formats.add_argument(
+        "--json",
+        action="store_true",
+        help="output the diff operations and moved blocks as JSON",
+    )
+    output.add_argument(
+        "-W",
+        "--width",
+        type=_positive_int,
+        default=130,
+        metavar="N",
+        help="total width of side-by-side output (default: %(default)s)",
+    )
+    output.add_argument(
+        "--suppress-common-lines",
+        action="store_true",
+        help="in side-by-side output, don't show unchanged lines",
     )
     parser.add_argument(
         "--color-moved",
@@ -329,6 +369,81 @@ def _render_change(
             yield _finish(f"{color}{sign}{text}{RESET}", ending)
 
 
+def render_side_by_side(
+    ops: Sequence[DiffOp[str]],
+    width: int = 130,
+    suppress_common_lines: bool = False,
+    color: bool = False,
+    algorithm: str = "histogram",
+    moves: Sequence[Move] = (),
+    dim_moved: bool = False,
+) -> Iterator[str]:
+    """Two-column terminal output, like ``diff -y``, optionally colored.
+
+    With ``color``, deleted text is red and inserted text green, the changed
+    words of paired lines are in reverse video, and moved lines get their
+    move colors.
+    """
+    column = max((width - 3) // 2, 1)
+    old_colors, new_colors = _move_colors(moves, dim_moved) if color else ({}, {})
+
+    def cell(
+        text: str | None,
+        index: int | None,
+        base: str,
+        move_colors: dict[int, str],
+        segments: list[tuple[str, bool]] | None,
+    ) -> tuple[str, int]:
+        """Rendered cell and its visible width."""
+        if text is None or index is None:
+            return "", 0
+        shown = text.rstrip("\r\n").expandtabs()[:column]
+        if not color:
+            return shown, len(shown)
+        move_color = move_colors.get(index)
+        if move_color:
+            return _paint(move_color, shown), len(shown)
+        if segments is None:
+            return (_paint(base, shown) if base else shown), len(shown)
+        pieces, used = [], 0
+        for piece, changed in segments:
+            piece = piece[: column - used]
+            if not piece:
+                break
+            pieces.append(f"{REVERSE}{piece}{NO_REVERSE}" if changed else piece)
+            used += len(piece)
+        return _paint(base, "".join(pieces)), used
+
+    for op in ops:
+        if op.tag == "equal" and suppress_common_lines:
+            continue
+        highlights = None
+        if color and op.tag == "replace":
+            moved = any(old_colors.get(i) for i in range(op.a_start, op.a_end)) or any(
+                new_colors.get(j) for j in range(op.b_start, op.b_end)
+            )
+            if not moved:
+                highlights = highlight_words(
+                    [line.rstrip("\r\n").expandtabs() for line in op.a_lines],
+                    [line.rstrip("\r\n").expandtabs() for line in op.b_lines],
+                    algorithm=algorithm,
+                )
+        changed = op.tag != "equal"
+        for row in side_by_side_rows([op]):
+            old_segments = new_segments = None
+            if highlights is not None:
+                if row.a_index is not None:
+                    old_segments = highlights[0][row.a_index - op.a_start]
+                if row.b_index is not None:
+                    new_segments = highlights[1][row.b_index - op.b_start]
+            left, left_width = cell(row.left, row.a_index, RED if changed else "",
+                                    old_colors, old_segments)
+            right, _ = cell(row.right, row.b_index, GREEN if changed else "",
+                            new_colors, new_segments)
+            line = f"{left}{' ' * (column - left_width)} {row.mark} {right}"
+            yield line.rstrip(" ") + "\n"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -358,20 +473,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     # Like GNU diff, differences that were all ignored count as no difference.
-    if not lines:
-        return 0
+    changed = bool(lines)
 
     show_moves = args.color_moved or args.dim_moved
-    # Match moved lines the same way the diff matched lines.
-    moves = find_moves(ops, key=key) if show_moves else []
-    if args.color_words:
-        mode = "words"
-    elif args.color or show_moves:
-        mode = "color"
+    color = args.color or show_moves
+    # Match moved lines the same way the diff matched lines. JSON always
+    # includes them, since it's data for other tools.
+    moves = find_moves(ops, key=key) if show_moves or args.json else []
+
+    chunks: Iterable[str]
+    if args.json:
+        chunks = [
+            to_json(ops, fromfile=args.file1, tofile=args.file2,
+                    algorithm=args.algorithm, moves=moves) + "\n"
+        ]
+    elif args.html:
+        chunks = [
+            html_diff(ops, fromfile=args.file1, tofile=args.file2,
+                      context=args.context, moves=moves,
+                      ignore_blank_lines=args.ignore_blank_lines,
+                      algorithm=args.algorithm)
+        ]
+    elif args.side_by_side:
+        chunks = render_side_by_side(ops, args.width, args.suppress_common_lines,
+                                     color, args.algorithm, moves, args.dim_moved)
+    elif not changed:
+        return 0
     else:
-        mode = "plain"
+        mode = "words" if args.color_words else "color" if color else "plain"
+        chunks = render(lines, mode, args.algorithm, moves, args.dim_moved)
+
     try:
-        for chunk in render(lines, mode, args.algorithm, moves, args.dim_moved):
+        for chunk in chunks:
             sys.stdout.write(chunk)
         sys.stdout.flush()
     except BrokenPipeError:
@@ -379,7 +512,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # devnull so the interpreter's final flush doesn't raise again.
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
-    return 1
+    return 1 if changed else 0
 
 
 if __name__ == "__main__":

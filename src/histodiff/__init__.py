@@ -7,8 +7,16 @@ from typing import Any, Callable
 
 from ._core import DiffOp, T
 from .compat import SequenceMatcher
-from .format import unified_diff
+from .format import (
+    SideBySideRow,
+    from_json,
+    side_by_side,
+    side_by_side_rows,
+    to_json,
+    unified_diff,
+)
 from .histogram import histogram_diff
+from .html_format import HTML_STYLE, html_diff
 from .moves import Move, find_moves
 from .myers import myers_diff
 from .patience import patience_diff
@@ -17,19 +25,26 @@ from .words import highlight_words, inline_word_diff, split_words
 
 __all__ = [
     "ALGORITHMS",
+    "HTML_STYLE",
     "DiffOp",
     "Move",
     "SequenceMatcher",
+    "SideBySideRow",
     "diff",
     "find_moves",
+    "from_json",
     "highlight_words",
     "histogram_diff",
+    "html_diff",
     "ignore_all_space",
     "ignore_space_change",
     "inline_word_diff",
     "myers_diff",
     "patience_diff",
+    "side_by_side",
+    "side_by_side_rows",
     "split_words",
+    "to_json",
     "unified_diff",
 ]
 __version__ = "0.1.0"
