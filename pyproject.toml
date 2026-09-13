@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["build>=1", "mypy>=1.10", "pytest>=7", "ruff>=0.5"]
+dev = ["build>=1", "hypothesis>=6", "mypy>=1.10", "pytest>=7", "ruff>=0.5"]
 
 [project.urls]
 Homepage = "https://github.com/rmnvg/histodiff"

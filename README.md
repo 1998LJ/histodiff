@@ -414,7 +414,10 @@ after your change and include both tables in the pull request.
 
 New behavior should come with tests. For changes to how lines get matched,
 add a realistic case to `tests/test_readability.py` showing the diff you
-expect. CI runs all of the above on Python 3.9–3.14.
+expect, plus a property in `tests/test_properties.py` when the behavior has
+a general invariant. Hypothesis complements the fixed regressions by exploring
+generated inputs and shrinking failures. CI runs all of the above on Python
+3.9–3.14.
 
 ## License
 
