@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 
 from . import ALGORITHMS, __version__, diff
 from .format import unified_diff
+from .whitespace import ignore_all_space, ignore_space_change
 
 RED = "\x1b[31m"
 GREEN = "\x1b[32m"
@@ -46,6 +47,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="always find the smallest diff, even if that is very slow on large, "
         "very different files",
+    )
+    whitespace = parser.add_argument_group("whitespace")
+    whitespace.add_argument(
+        "-b",
+        "--ignore-space-change",
+        action="store_true",
+        help="ignore changes in the amount of whitespace (trailing whitespace, "
+        "and runs of spaces/tabs, compare as one space)",
+    )
+    whitespace.add_argument(
+        "-w",
+        "--ignore-all-space",
+        action="store_true",
+        help="ignore all whitespace when comparing lines (overrides -b)",
+    )
+    whitespace.add_argument(
+        "-B",
+        "--ignore-blank-lines",
+        action="store_true",
+        help="ignore changes whose lines are all blank",
     )
     parser.add_argument(
         "--color",
@@ -125,18 +146,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"histodiff: {name}: {exc.strerror or exc}", file=sys.stderr)
         return 2
 
-    ops = diff(a, b, algorithm=args.algorithm, minimal=args.minimal)
-    if all(op.tag == "equal" for op in ops):
+    key: Callable[[str], str] | None = None
+    if args.ignore_all_space:
+        key = ignore_all_space
+    elif args.ignore_space_change:
+        key = ignore_space_change
+
+    ops = diff(a, b, algorithm=args.algorithm, minimal=args.minimal, key=key)
+    lines = list(
+        unified_diff(
+            ops,
+            args.context,
+            fromfile=args.file1,
+            tofile=args.file2,
+            fromfiledate=a_date,
+            tofiledate=b_date,
+            ignore_blank_lines=args.ignore_blank_lines,
+        )
+    )
+    # Like GNU diff, differences that were all ignored count as no difference.
+    if not lines:
         return 0
 
-    lines = unified_diff(
-        ops,
-        args.context,
-        fromfile=args.file1,
-        tofile=args.file2,
-        fromfiledate=a_date,
-        tofiledate=b_date,
-    )
     try:
         for index, line in enumerate(lines):
             sys.stdout.write(_render(index, line, args.color))

@@ -11,6 +11,7 @@ from .format import unified_diff
 from .histogram import histogram_diff
 from .myers import myers_diff
 from .patience import patience_diff
+from .whitespace import ignore_all_space, ignore_space_change
 
 __all__ = [
     "ALGORITHMS",
@@ -18,6 +19,8 @@ __all__ = [
     "SequenceMatcher",
     "diff",
     "histogram_diff",
+    "ignore_all_space",
+    "ignore_space_change",
     "myers_diff",
     "patience_diff",
     "unified_diff",

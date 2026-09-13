@@ -107,6 +107,32 @@ ops = diff(old, new, algorithm="myers")   # equivalent to myers_diff(old, new)
 ops = diff(old, new, minimal=True)        # never trade diff size for speed
 ```
 
+### Ignoring whitespace
+
+Re-indenting a block, for example wrapping it in an `if`, changes every line
+in it and buries the one line that matters. To compare lines while ignoring
+whitespace, pass a whitespace key. The printed diff still shows the original
+lines:
+
+```python
+from histodiff import diff, ignore_all_space, ignore_space_change, unified_diff
+
+ops = diff(old, new, key=ignore_space_change)   # like diff -b
+ops = diff(old, new, key=ignore_all_space)      # like diff -w
+print("".join(unified_diff(ops, ignore_blank_lines=True)))   # like diff -B
+```
+
+- `ignore_space_change` ignores trailing whitespace and treats any run of
+  spaces or tabs as a single space. How deep a line is indented doesn't
+  matter, but whether it is indented at all does.
+- `ignore_all_space` removes all whitespace before comparing.
+- `ignore_blank_lines=True` hides changes that only add or remove blank
+  (empty or whitespace-only) lines. If a hunk also contains a real change,
+  it's shown in full.
+
+Lines that matched are printed as they appear in the old file, as GNU diff
+prints them.
+
 ### Words, tokens and records
 
 `diff` works on any sequence of hashable items, not just lines:
@@ -176,12 +202,15 @@ histodiff old.py new.py                           # unified diff, histogram algo
 histodiff old.py new.py --algorithm patience
 histodiff old.py new.py --color                   # green additions, red deletions
 histodiff old.py new.py -U 10                     # 10 lines of context
+histodiff old.py new.py -b                        # ignore changes in amount of whitespace
+histodiff old.py new.py -w                        # ignore all whitespace
+histodiff old.py new.py -B                        # ignore changes that are only blank lines
 histodiff old.py new.py --minimal                 # smallest diff, however long it takes
 cat new.py | histodiff old.py -                   # '-' reads stdin
 ```
 
-As with `diff`, the exit status is 0 when the files are identical, 1 when
-they differ, and 2 on error. Try it on the classic patience-diff example:
+As with `diff`, the exit status is 0 when the files are identical (or differ
+only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:
 `histodiff examples/frobnitz_old.c examples/frobnitz_new.c`, then the same
 with `--algorithm myers`.
 

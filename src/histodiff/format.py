@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 
 from ._core import DiffOp
+from .whitespace import is_blank
 
 __all__ = ["unified_diff"]
 
@@ -58,6 +59,7 @@ def unified_diff(
     fromfiledate: str = "",
     tofiledate: str = "",
     lineterm: str = "\n",
+    ignore_blank_lines: bool = False,
 ) -> Iterator[str]:
     """Render diff ops in unified diff format.
 
@@ -75,6 +77,15 @@ def unified_diff(
 
     :param ops: the result of :func:`histodiff.diff` or an algorithm function.
     :param context: number of unchanged lines shown around each change.
+    :param ignore_blank_lines: skip hunks whose changes only add or remove
+        blank (empty or whitespace-only) lines, like ``diff -B``. A hunk that
+        also contains a real change is shown in full, blank lines included,
+        so every hunk's line counts stay consistent.
+
+    Unchanged lines are printed from ``a``. That matters when the ops come
+    from a ``key`` such as :func:`histodiff.ignore_space_change`, where the
+    two sides of an unchanged line may differ in whitespace: like GNU diff,
+    the old file's version is shown.
     :raises ValueError: if ``context`` is negative.
     :raises TypeError: if the ops hold anything but strings; unified diff is
         a text format, so convert other items first (e.g. with ``str``).
@@ -91,7 +102,14 @@ def unified_diff(
                     "items with str() first"
                 )
     return _unified_diff(
-        ops, context, fromfile, tofile, fromfiledate, tofiledate, lineterm
+        ops,
+        context,
+        fromfile,
+        tofile,
+        fromfiledate,
+        tofiledate,
+        lineterm,
+        ignore_blank_lines,
     )
 
 
@@ -103,11 +121,21 @@ def _unified_diff(
     fromfiledate: str,
     tofiledate: str,
     lineterm: str,
+    ignore_blank_lines: bool,
 ) -> Iterator[str]:
     a = [line for op in ops for line in op.a_lines]
     b = [line for op in ops for line in op.b_lines]
     started = False
     for group in _group([op.as_opcode() for op in ops], context):
+        if ignore_blank_lines and all(
+            tag == "equal"
+            or (
+                all(is_blank(line) for line in a[i1:i2])
+                and all(is_blank(line) for line in b[j1:j2])
+            )
+            for tag, i1, i2, j1, j2 in group
+        ):
+            continue
         if not started:
             started = True
             fromdate = f"\t{fromfiledate}" if fromfiledate else ""
