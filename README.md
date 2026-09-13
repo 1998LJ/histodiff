@@ -4,12 +4,13 @@
 or reformatted blocks.**
 
 Use histodiff when Python's `difflib` turns a small structural change into a
-large, noisy diff. Its histogram alignment starts from distinctive lines, then
-readability cleanup keeps change boundaries natural. You can switch to patience
-or Myers alignment, detect moved blocks, highlight changed words, ignore
-whitespace, and render unified, side-by-side, HTML, or versioned JSON output.
-The same API works with text, tokens, and other Python sequences, includes a
-`difflib.SequenceMatcher`-compatible class, and has no runtime dependencies.
+large, noisy diff. Its Git-inspired histogram alignment starts from distinctive
+lines, then readability cleanup keeps change boundaries natural. You can switch
+to patience or Myers alignment, detect moved blocks, highlight changed words,
+ignore whitespace, and render unified, side-by-side, HTML, or versioned JSON
+output. The same API works with text, tokens, and other Python sequences,
+includes a `difflib.SequenceMatcher`-compatible class, and has no runtime
+dependencies.
 
 ## Why
 
@@ -23,9 +24,10 @@ reporting that almost the whole file was deleted and re-added.
 
 By default, histodiff lines files up on their *distinctive* lines first: a
 function name, a section header, the one row of data that changed. Everything
-else falls into place around those. Moved code shows up as moved, a one-line
-change stays a one-line change, and change blocks start and end at natural
-boundaries such as blank lines rather than halfway through a block.
+else falls into place around those. A one-line change stays a one-line change,
+and change blocks start and end at natural boundaries such as blank lines rather
+than halfway through a block. Optional move detection can then pair a deleted
+block with an identical block inserted elsewhere.
 
 ## Before and after
 
@@ -180,6 +182,12 @@ Each `Move` holds the positions on both sides plus the lines themselves
 (`a_lines`, `b_lines`). Pass `min_alnum=` to change the size threshold, or
 `key=` to match moved lines the same way the diff did, for example
 `key=ignore_all_space`.
+
+Move detection is a separate step from alignment: `diff()` returns ordinary
+delete and insert operations. Call `find_moves()` to identify matching pairs.
+On the command line, `--color-moved` and `--dim-moved` enable move highlighting;
+JSON output includes detected moves automatically. Unified, side-by-side, and
+HTML output without a move option show normal deletions and insertions.
 
 ### Other output formats
 
@@ -345,10 +353,11 @@ with `--algorithm myers`.
 | `patience` | Code with plenty of unique lines, where you want strict "only anchor on lines that appear exactly once" behavior. | If no line is unique, for example when blocks are duplicated, it falls back to Myers. |
 | `myers` | You need the minimum number of changed lines (with `minimal=True` on big, very different inputs), or you're comparing against `git diff --diff-algorithm=myers`. | Readily matches stray `}` and blank lines, which splits moved or rewritten blocks into many interleaved hunks. |
 
-- **histogram** is Git's recommended algorithm (`git diff --diff-algorithm=histogram`).
-  It works like patience but anchors on the *rarest* matching lines instead of
-  demanding strictly unique ones. That keeps it readable when every line repeats
-  somewhere. Lines that occur more than 64 times are never used as anchors.
+- **histogram** is inspired by Git's histogram diff option
+  (`git diff --diff-algorithm=histogram`). It works like patience but anchors on
+  the *rarest* matching lines instead of demanding strictly unique ones. That
+  keeps it readable when every line repeats somewhere. Lines that occur more
+  than 64 times are never used as anchors.
 - **patience** anchors on lines that occur exactly once in both files, keeps the
   longest run of them that appears in the same order, and repeats that between
   the anchors.
@@ -381,9 +390,9 @@ cell shows the time, then the number of lines the diff marks as changed:
 | Row inserted in repeated rows | 3 ms (20,001) | 4 ms (1) | 4 ms (1) | 4 ms (1) |
 | Unrelated files (worst case) | 3 ms (40,000) | 1.67 s (30,232) | 1.66 s (30,232) | 1.71 s (30,232) |
 
-- **Everyday edits:** histodiff is about as fast as difflib or faster, and
-  its diffs are never larger. With many scattered edits, histogram is about
-  25× faster than difflib here.
+- **Everyday edits:** in these benchmark scenarios, histodiff is about as fast
+  as difflib or faster and marks no more lines as changed. In the scattered-edit
+  scenario shown here, histogram is about 25× faster than difflib.
 - **Unrelated files:** difflib is far faster, because on large files it
   effectively gives up and marks every line as changed. histodiff still
   lines up the lines the files share, which takes longer.
@@ -395,6 +404,26 @@ cell shows the time, then the number of lines the diff marks as changed:
 
 Run `python benchmarks/bench.py --help` for sizes, repeats and a Markdown
 output mode.
+
+## Limitations
+
+- histodiff works in memory. The CLI reads both inputs before comparing them,
+  and diff operations retain their corresponding items. Very large inputs can
+  therefore require substantial memory.
+- The CLI is intended for UTF-8 text files, not binary files. Invalid UTF-8
+  bytes are decoded with replacement characters, so use your own decoding and
+  the Python API when byte-exact handling or another encoding is required.
+- During the `0.x` series, readability improvements may change the exact valid
+  alignment selected for ambiguous input. Avoid snapshotting an alignment when
+  your application only needs to verify that applying the operations recreates
+  the new sequence.
+- The algorithms and cleanup rules are Git-inspired, but output is not
+  guaranteed to match Git for every input.
+- histodiff generates and renders differences; it does not apply unified diff
+  patches.
+- `minimal=True` and `--minimal` disable the search cap. They can take
+  quadratic time on large, unrelated inputs and should be used only when a
+  smallest edit script matters more than runtime.
 
 ## Contributing
 
