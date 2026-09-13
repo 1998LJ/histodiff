@@ -165,20 +165,26 @@ def test_random_whitespace_edits(seed: int) -> None:
         ops = diff(old, new, key=key)
         for ignore_blank in (False, True):
             lines = list(
-                unified_diff(ops, context=rng.randint(0, 3), lineterm="",
-                             ignore_blank_lines=ignore_blank)
+                unified_diff(
+                    ops,
+                    context=rng.randint(0, 3),
+                    lineterm="",
+                    ignore_blank_lines=ignore_blank,
+                )
             )
             assert_hunks_consistent(lines)
             if not ignore_blank:
                 continue
             # Every real change is still printed; hidden hunks were blank-only.
             printed = [
-                line[1:] for line in lines[2:]
+                line[1:]
+                for line in lines[2:]
                 if line[:1] in "+-" and not is_blank(line[1:])
             ]
             real = [
                 line
-                for op in ops if op.tag != "equal"
+                for op in ops
+                if op.tag != "equal"
                 for line in op.a_lines + op.b_lines
                 if not is_blank(line)
             ]
@@ -196,14 +202,14 @@ def wrapped_files(tmp_path) -> tuple[str, str]:
     return write(tmp_path / "old.py", old), write(tmp_path / "new.py", new)
 
 
-@pytest.mark.parametrize("flag", ["-b", "--ignore-space-change",
-                                  "-w", "--ignore-all-space"])
+@pytest.mark.parametrize(
+    "flag", ["-b", "--ignore-space-change", "-w", "--ignore-all-space"]
+)
 def test_cli_whitespace_flags(wrapped_files, capsys, flag: str) -> None:
     assert main([*wrapped_files, flag]) == 1
     out = capsys.readouterr().out.splitlines()
     changed = [
-        line for line in out
-        if line[:1] in "+-" and not line.startswith(("---", "+++"))
+        line for line in out if line[:1] in "+-" and not line.startswith(("---", "+++"))
     ]
     assert changed == [
         "+    if ENABLED:",

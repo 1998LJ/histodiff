@@ -170,10 +170,12 @@ def html_diff(
                         old_segments = highlights[0][row.a_index - i1]
                     if row.b_index is not None:
                         new_segments = highlights[1][row.b_index - j1]
-                left = _cell(row.left, row.a_index, "old", changed, old_moved,
-                             old_segments)
-                right = _cell(row.right, row.b_index, "new", changed, new_moved,
-                              new_segments)
+                left = _cell(
+                    row.left, row.a_index, "old", changed, old_moved, old_segments
+                )
+                right = _cell(
+                    row.right, row.b_index, "new", changed, new_moved, new_segments
+                )
                 rows.append(f'<tr class="{_ROW_CLASS[row.mark]}">{left}{right}</tr>')
     if not groups:
         rows.append('<tr class="no-changes"><td colspan="4">No differences</td></tr>')

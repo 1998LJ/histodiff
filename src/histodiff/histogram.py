@@ -75,7 +75,8 @@ def _find_run(
                     a_start, b_start, a_end, b_end = i, j, i + 1, j + 1
                     rarity = count
                     while (
-                        a_start > alo and b_start > blo
+                        a_start > alo
+                        and b_start > blo
                         and a[a_start - 1] == b[b_start - 1]
                     ):
                         a_start -= 1

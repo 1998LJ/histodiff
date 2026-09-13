@@ -15,8 +15,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python -m pip install ruff
+      - run: python -m pip install -e ".[dev]"
       - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy src
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build
+      - run: python -m build
+      - run: python -m pip install dist/*.whl
+      - name: Test installed wheel outside the source tree
+        run: |
+          cd "${RUNNER_TEMP}"
+          python -c "import histodiff; assert histodiff.__version__ == '0.1.0'"
+          histodiff --version
 
   test:
     runs-on: ${{ matrix.os }}

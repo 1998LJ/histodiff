@@ -78,10 +78,13 @@ def test_diff_and_cli_pass_minimal_through(
     counts = []
     for flag in ([], ["--minimal"]):
         main([str(old), str(new), "--algorithm", "myers", "-U", "0", *flag])
-        counts.append(sum(
-            1 for line in capsys.readouterr().out.splitlines()
-            if line[:1] in "+-" and not line.startswith(("---", "+++"))
-        ))
+        counts.append(
+            sum(
+                1
+                for line in capsys.readouterr().out.splitlines()
+                if line[:1] in "+-" and not line.startswith(("---", "+++"))
+            )
+        )
     assert counts == [
         changed_lines(myers_diff(a, b)),
         changed_lines(myers_diff(a, b, minimal=True)),

@@ -56,8 +56,7 @@ def test_algorithm_flag(files, capsys, algorithm) -> None:
     assert main([old, new, "--algorithm", algorithm, "-U", "0"]) == 1
     out = capsys.readouterr().out.splitlines()
     changed = [
-        line for line in out
-        if line[:1] in "+-" and not line.startswith(("+++", "---"))
+        line for line in out if line[:1] in "+-" and not line.startswith(("+++", "---"))
     ]
     hunks = [line for line in out if line.startswith("@@")]
     # All three change 21 lines here, but Myers interleaves fact() and fib()
@@ -114,6 +113,16 @@ def test_stdin(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO("y\n"))
     assert main([a, "-"]) == 1
     assert capsys.readouterr().out.endswith("-x\n+y\n")
+
+
+def test_stdin_cannot_be_both_inputs(monkeypatch, capsys) -> None:
+    import io
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO("content that must not be read\n"))
+    assert main(["-", "-"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "standard input may only be specified once" in captured.err
 
 
 def test_split_lines() -> None:

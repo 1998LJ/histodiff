@@ -166,12 +166,14 @@ def test_moves_are_consistent(seed: int) -> None:
         # Each side lies within a single changed op, and lines aren't reused.
         assert any(
             op.tag in ("delete", "replace")
-            and op.a_start <= move.a_start and move.a_end <= op.a_end
+            and op.a_start <= move.a_start
+            and move.a_end <= op.a_end
             for op in ops
         )
         assert any(
             op.tag in ("insert", "replace")
-            and op.b_start <= move.b_start and move.b_end <= op.b_end
+            and op.b_start <= move.b_start
+            and move.b_end <= op.b_end
             for op in ops
         )
         span_a = set(range(move.a_start, move.a_end))
@@ -188,9 +190,14 @@ def test_moves_are_consistent(seed: int) -> None:
 
 def test_render_colors_moves_and_alternates_adjacent_blocks() -> None:
     lines = [
-        "--- a\n", "+++ b\n",
-        "@@ -1,2 +1,0 @@\n", f"-{LONG1}\n", f"-{LONG2}\n",
-        "@@ -5,0 +3,2 @@\n", f"+{LONG2}\n", f"+{LONG1}\n",
+        "--- a\n",
+        "+++ b\n",
+        "@@ -1,2 +1,0 @@\n",
+        f"-{LONG1}\n",
+        f"-{LONG2}\n",
+        "@@ -5,0 +3,2 @@\n",
+        f"+{LONG2}\n",
+        f"+{LONG1}\n",
     ]
     moves = [
         Move(0, 1, 3, 4, (LONG1,), (LONG1,)),
@@ -266,10 +273,10 @@ def test_cli_color_moved(moved_files, capsys) -> None:
     assert f"{BOLD}{MAGENTA}-def func_1(data):{RESET}\n" in out
     assert f"{BOLD}{CYAN}+def func_1(data):{RESET}\n" in out
     # The real edit is still a normal, word-highlighted change.
-    assert (f"{RED}-    result.append(data[0] * {REVERSE}4{NO_REVERSE}){RESET}\n"
-            in out)
-    assert (f"{GREEN}+    result.append(data[0] * {REVERSE}40{NO_REVERSE}){RESET}\n"
-            in out)
+    assert f"{RED}-    result.append(data[0] * {REVERSE}4{NO_REVERSE}){RESET}\n" in out
+    assert (
+        f"{GREEN}+    result.append(data[0] * {REVERSE}40{NO_REVERSE}){RESET}\n" in out
+    )
 
 
 def test_cli_dim_moved(moved_files, capsys) -> None:

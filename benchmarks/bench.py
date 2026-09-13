@@ -152,14 +152,25 @@ def fmt_time(seconds: float) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--sizes", type=int, nargs="+", default=[2_000, 20_000],
-                        help="approximate lines per file (default: 2000 20000)")
-    parser.add_argument("--repeat", type=int, default=3,
-                        help="runs per measurement; the best is kept (default: 3)")
-    parser.add_argument("--quick", action="store_true",
-                        help="one small size, one run (CI smoke test)")
-    parser.add_argument("--minimal", action="store_true",
-                        help="also time histogram with minimal=True")
+    parser.add_argument(
+        "--sizes",
+        type=int,
+        nargs="+",
+        default=[2_000, 20_000],
+        help="approximate lines per file (default: 2000 20000)",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=3,
+        help="runs per measurement; the best is kept (default: 3)",
+    )
+    parser.add_argument(
+        "--quick", action="store_true", help="one small size, one run (CI smoke test)"
+    )
+    parser.add_argument(
+        "--minimal", action="store_true", help="also time histogram with minimal=True"
+    )
     parser.add_argument("--markdown", action="store_true", help="markdown table")
     args = parser.parse_args()
     sizes, repeat = ([500], 1) if args.quick else (args.sizes, args.repeat)
@@ -180,8 +191,10 @@ def main() -> int:
             if not args.markdown:
                 print("  ".join(row), file=sys.stderr, flush=True)
 
-    print(f"Python {platform.python_version()} on {platform.machine()}, "
-          f"best of {repeat}; cells are time (changed lines)\n")
+    print(
+        f"Python {platform.python_version()} on {platform.machine()}, "
+        f"best of {repeat}; cells are time (changed lines)\n"
+    )
     if args.markdown:
         print("| " + " | ".join(header) + " |")
         print("|" + "|".join(" --- " for _ in header) + "|")

@@ -33,11 +33,36 @@ COLUMN = 52
 # --------------------------------------------------------------------------
 
 RESOURCES = [
-    "users", "orders", "invoices", "payments", "refunds", "products", "carts",
-    "reviews", "shipments", "coupons", "tickets", "sessions", "reports",
-    "alerts", "teams", "projects", "tasks", "comments", "files", "webhooks",
-    "events", "tags", "roles", "plans", "quotes", "leads", "notes", "badges",
-    "vendors", "regions",
+    "users",
+    "orders",
+    "invoices",
+    "payments",
+    "refunds",
+    "products",
+    "carts",
+    "reviews",
+    "shipments",
+    "coupons",
+    "tickets",
+    "sessions",
+    "reports",
+    "alerts",
+    "teams",
+    "projects",
+    "tasks",
+    "comments",
+    "files",
+    "webhooks",
+    "events",
+    "tags",
+    "roles",
+    "plans",
+    "quotes",
+    "leads",
+    "notes",
+    "badges",
+    "vendors",
+    "regions",
 ]
 
 
@@ -70,8 +95,14 @@ def unique_row() -> tuple[list[str], list[str]]:
 
 
 def config_section(name: str, port: int) -> list[str]:
-    return [f"[{name}]", "enabled = true", f"port = {port}", "timeout = 30",
-            "retries = 3", ""]
+    return [
+        f"[{name}]",
+        "enabled = true",
+        f"port = {port}",
+        "timeout = 30",
+        "retries = 3",
+        "",
+    ]
 
 
 SERVICES = ["api", "web", "worker", "cron", "cache", "db"]
@@ -157,8 +188,12 @@ def change_starts(ops: list[histodiff.DiffOp]) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--lines", type=int, default=24,
-                        help="diff lines to show per scenario (default: 24)")
+    parser.add_argument(
+        "--lines",
+        type=int,
+        default=24,
+        help="diff lines to show per scenario (default: 24)",
+    )
     parser.add_argument("--full", action="store_true", help="show complete diffs")
     args = parser.parse_args()
     limit = None if args.full else args.lines
@@ -175,8 +210,10 @@ def main() -> int:
     assert stats(after)[1] == 1 < stats(before)[1]
 
     before, after = scenario(
-        3, "A config section moved up (small file, same diff size)",
-        *reordered_sections(), limit,
+        3,
+        "A config section moved up (small file, same diff size)",
+        *reordered_sections(),
+        limit,
     )
     # Same number of changed lines, but only histodiff's blocks start and end
     # on section boundaries; difflib's cut through the middle of [cache].

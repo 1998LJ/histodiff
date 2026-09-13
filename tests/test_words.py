@@ -27,7 +27,14 @@ from test_cli import write
 
 def test_split_words() -> None:
     assert split_words("result = process(event)") == [
-        "result", " ", "=", " ", "process", "(", "event", ")"
+        "result",
+        " ",
+        "=",
+        " ",
+        "process",
+        "(",
+        "event",
+        ")",
     ]
     assert split_words("  a->b\t") == ["  ", "a", "-", ">", "b", "\t"]
     assert split_words("") == []
@@ -52,9 +59,7 @@ def test_highlight_single_changed_word() -> None:
         ["    result = process(event)"], ["    result = process_v2(event)"]
     )
     assert old == [[("    result = ", False), ("process", True), ("(event)", False)]]
-    assert new == [
-        [("    result = ", False), ("process_v2", True), ("(event)", False)]
-    ]
+    assert new == [[("    result = ", False), ("process_v2", True), ("(event)", False)]]
 
 
 def test_highlight_across_lines() -> None:
@@ -68,10 +73,14 @@ def test_highlight_segments_rebuild_lines() -> None:
     rng = random.Random(1)
     words = ["x", "y", "=", "(", ")", " ", "  ", "foo", "bar", ","]
     for _ in range(200):
-        old = ["".join(rng.choice(words) for _ in range(rng.randint(1, 8)))
-               for _ in range(rng.randint(1, 3))]
-        new = ["".join(rng.choice(words) for _ in range(rng.randint(1, 8)))
-               for _ in range(rng.randint(1, 3))]
+        old = [
+            "".join(rng.choice(words) for _ in range(rng.randint(1, 8)))
+            for _ in range(rng.randint(1, 3))
+        ]
+        new = [
+            "".join(rng.choice(words) for _ in range(rng.randint(1, 8)))
+            for _ in range(rng.randint(1, 3))
+        ]
         result = highlight_words(old, new, min_similarity=0)
         assert result is not None
         for lines, segments in zip((old, new), result):
@@ -127,8 +136,9 @@ def test_every_algorithm_works(algorithm: str) -> None:
 
 
 def test_inline_single_word() -> None:
-    assert inline_word_diff(["result = process(event)"],
-                            ["result = process_v2(event)"]) == [
+    assert inline_word_diff(
+        ["result = process(event)"], ["result = process_v2(event)"]
+    ) == [
         ("equal", "result = "),
         ("delete", "process"),
         ("insert", "process_v2"),
@@ -162,8 +172,12 @@ def test_inline_one_side_empty() -> None:
 # --------------------------------------------------------------------------
 
 OLD = ["def handle(event):", "    result = process(event)", "    return result"]
-NEW = ["def handle(event):", "    result = process_v2(event)", "    return result",
-       "# totally unrelated trailer"]
+NEW = [
+    "def handle(event):",
+    "    result = process_v2(event)",
+    "    return result",
+    "# totally unrelated trailer",
+]
 
 
 @pytest.fixture
@@ -174,10 +188,10 @@ def files(tmp_path) -> tuple[str, str]:
 def test_color_highlights_changed_words(files, capsys) -> None:
     assert main([*files, "--color"]) == 1
     out = capsys.readouterr().out
-    assert (f"{RED}-    result = {REVERSE}process{NO_REVERSE}(event){RESET}\n"
-            in out)
-    assert (f"{GREEN}+    result = {REVERSE}process_v2{NO_REVERSE}(event){RESET}\n"
-            in out)
+    assert f"{RED}-    result = {REVERSE}process{NO_REVERSE}(event){RESET}\n" in out
+    assert (
+        f"{GREEN}+    result = {REVERSE}process_v2{NO_REVERSE}(event){RESET}\n" in out
+    )
     # A pure insertion has nothing to compare against: no highlighting.
     assert f"{GREEN}+# totally unrelated trailer{RESET}\n" in out
 
@@ -217,8 +231,27 @@ def test_render_keeps_no_newline_marker_and_crlf() -> None:
     )
 
 
+def test_color_words_keeps_no_newline_markers(tmp_path, capsys) -> None:
+    old = write(tmp_path / "old", ["alpha beta"], trailing_newline=False)
+    new = write(tmp_path / "new", ["alpha gamma"], trailing_newline=False)
+    assert main([old, new, "--color-words"]) == 1
+    assert capsys.readouterr().out.count(NO_NEWLINE) == 2
+
+    with_newline = write(tmp_path / "with-newline", ["same"])
+    without_newline = write(
+        tmp_path / "without-newline", ["same"], trailing_newline=False
+    )
+    assert main([with_newline, without_newline, "--color-words"]) == 1
+    assert capsys.readouterr().out.endswith(f"same\n{NO_NEWLINE}")
+
+
 def test_render_does_not_treat_deleted_dashes_as_headers() -> None:
-    lines = ["--- a\n", "+++ b\n", "@@ -1 +1 @@\n", "--- old sql comment\n",
-             "+-- new sql comment\n"]
+    lines = [
+        "--- a\n",
+        "+++ b\n",
+        "@@ -1 +1 @@\n",
+        "--- old sql comment\n",
+        "+-- new sql comment\n",
+    ]
     out = "".join(render(lines, "color"))
     assert f"{RED}--- {REVERSE}old{NO_REVERSE} sql comment{RESET}\n" in out

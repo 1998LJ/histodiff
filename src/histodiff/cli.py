@@ -11,7 +11,15 @@ from datetime import datetime
 
 from . import ALGORITHMS, __version__, diff
 from ._core import DiffOp
-from .format import side_by_side_rows, to_json, unified_diff
+from .format import (
+    _expand_tabs,
+    _ignored_blank_opcodes,
+    _strip_ending,
+    _truncate_width,
+    side_by_side_rows,
+    to_json,
+    unified_diff,
+)
 from .html_format import html_diff
 from .moves import Move, find_moves
 from .whitespace import ignore_all_space, ignore_space_change
@@ -295,7 +303,7 @@ def render(
             i = k
         else:  # context line
             if mode == "words":
-                yield body[1:] + (ending or "\n")
+                yield _finish(body[1:], ending)
             else:
                 yield _finish(body, ending)
             old_next += 1
@@ -325,27 +333,44 @@ def _render_change(
     new_bodies = [new_parts[n][0] for n in new_plain]
 
     if mode == "words":
-        for (body, _), color in zip(old_parts, old_moved):
+        for (body, ending), color in zip(old_parts, old_moved):
             if color:
-                yield _paint(color, body) + "\n"
+                yield _finish(_paint(color, body), ending)
         if old_bodies and new_bodies:
             pieces = []
-            for tag, text in inline_word_diff(old_bodies, new_bodies,
-                                              algorithm=algorithm):
+            for tag, text in inline_word_diff(
+                old_bodies, new_bodies, algorithm=algorithm
+            ):
                 color = {"equal": "", "delete": RED, "insert": GREEN}[tag]
                 # Color each physical line separately so pagers stay tidy.
-                pieces.append("\n".join(
-                    _paint(color, part) if color else part
-                    for part in text.split("\n")
-                ))
+                pieces.append(
+                    "\n".join(
+                        _paint(color, part) if color else part
+                        for part in text.split("\n")
+                    )
+                )
             yield "".join(pieces) + "\n"
+            if (
+                old_plain
+                and old_plain[-1] == len(old_parts) - 1
+                and not old_parts[-1][1]
+            ):
+                yield NO_NEWLINE
+            if (
+                new_plain
+                and new_plain[-1] == len(new_parts) - 1
+                and not new_parts[-1][1]
+            ):
+                yield NO_NEWLINE
         else:
             color = RED if old_bodies else GREEN
-            for body in old_bodies or new_bodies:
-                yield _paint(color, body) + "\n"
-        for (body, _), color in zip(new_parts, new_moved):
+            source_parts = old_parts if old_bodies else new_parts
+            plain_parts = [source_parts[number] for number in old_plain or new_plain]
+            for body, ending in plain_parts:
+                yield _finish(_paint(color, body), ending)
+        for (body, ending), color in zip(new_parts, new_moved):
             if color:
-                yield _paint(color, body) + "\n"
+                yield _finish(_paint(color, body), ending)
         return
 
     highlights = highlight_words(old_bodies, new_bodies, algorithm=algorithm)
@@ -377,6 +402,8 @@ def render_side_by_side(
     algorithm: str = "histogram",
     moves: Sequence[Move] = (),
     dim_moved: bool = False,
+    ignore_blank_lines: bool = False,
+    context: int = 3,
 ) -> Iterator[str]:
     """Two-column terminal output, like ``diff -y``, optionally colored.
 
@@ -397,24 +424,31 @@ def render_side_by_side(
         """Rendered cell and its visible width."""
         if text is None or index is None:
             return "", 0
-        shown = text.rstrip("\r\n").expandtabs()[:column]
+        shown, shown_width = _truncate_width(
+            _expand_tabs(_strip_ending(text), 8), column
+        )
         if not color:
-            return shown, len(shown)
+            return shown, shown_width
         move_color = move_colors.get(index)
         if move_color:
-            return _paint(move_color, shown), len(shown)
+            return _paint(move_color, shown), shown_width
         if segments is None:
-            return (_paint(base, shown) if base else shown), len(shown)
+            return (_paint(base, shown) if base else shown), shown_width
         pieces, used = [], 0
         for piece, changed in segments:
-            piece = piece[: column - used]
-            if not piece:
+            piece, piece_width = _truncate_width(piece, column - used)
+            if not piece and piece_width == 0:
                 break
             pieces.append(f"{REVERSE}{piece}{NO_REVERSE}" if changed else piece)
-            used += len(piece)
+            used += piece_width
         return _paint(base, "".join(pieces)), used
 
+    ignored = (
+        _ignored_blank_opcodes(ops, context) if ignore_blank_lines else frozenset()
+    )
     for op in ops:
+        if op.as_opcode() in ignored:
+            continue
         if op.tag == "equal" and suppress_common_lines:
             continue
         highlights = None
@@ -424,8 +458,8 @@ def render_side_by_side(
             )
             if not moved:
                 highlights = highlight_words(
-                    [line.rstrip("\r\n").expandtabs() for line in op.a_lines],
-                    [line.rstrip("\r\n").expandtabs() for line in op.b_lines],
+                    [_expand_tabs(_strip_ending(line), 8) for line in op.a_lines],
+                    [_expand_tabs(_strip_ending(line), 8) for line in op.b_lines],
                     algorithm=algorithm,
                 )
         changed = op.tag != "equal"
@@ -436,16 +470,25 @@ def render_side_by_side(
                     old_segments = highlights[0][row.a_index - op.a_start]
                 if row.b_index is not None:
                     new_segments = highlights[1][row.b_index - op.b_start]
-            left, left_width = cell(row.left, row.a_index, RED if changed else "",
-                                    old_colors, old_segments)
-            right, _ = cell(row.right, row.b_index, GREEN if changed else "",
-                            new_colors, new_segments)
+            left, left_width = cell(
+                row.left, row.a_index, RED if changed else "", old_colors, old_segments
+            )
+            right, _ = cell(
+                row.right,
+                row.b_index,
+                GREEN if changed else "",
+                new_colors,
+                new_segments,
+            )
             line = f"{left}{' ' * (column - left_width)} {row.mark} {right}"
             yield line.rstrip(" ") + "\n"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.file1 == args.file2 == "-":
+        print("histodiff: standard input may only be specified once", file=sys.stderr)
+        return 2
     try:
         a, a_date = _read(args.file1)
         b, b_date = _read(args.file2)
@@ -461,19 +504,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         key = ignore_space_change
 
     ops = diff(a, b, algorithm=args.algorithm, minimal=args.minimal, key=key)
-    lines = list(
-        unified_diff(
-            ops,
-            args.context,
-            fromfile=args.file1,
-            tofile=args.file2,
-            fromfiledate=a_date,
-            tofiledate=b_date,
-            ignore_blank_lines=args.ignore_blank_lines,
-        )
+    del a, b
+    ignored = (
+        _ignored_blank_opcodes(ops, args.context)
+        if args.ignore_blank_lines
+        else frozenset()
     )
-    # Like GNU diff, differences that were all ignored count as no difference.
-    changed = bool(lines)
+    changed = any(op.tag != "equal" and op.as_opcode() not in ignored for op in ops)
 
     show_moves = args.color_moved or args.dim_moved
     color = args.color or show_moves
@@ -484,22 +521,55 @@ def main(argv: Sequence[str] | None = None) -> int:
     chunks: Iterable[str]
     if args.json:
         chunks = [
-            to_json(ops, fromfile=args.file1, tofile=args.file2,
-                    algorithm=args.algorithm, moves=moves) + "\n"
+            to_json(
+                ops,
+                fromfile=args.file1,
+                tofile=args.file2,
+                algorithm=args.algorithm,
+                moves=moves,
+                ignore_blank_lines=args.ignore_blank_lines,
+                context=args.context,
+            )
+            + "\n"
         ]
     elif args.html:
         chunks = [
-            html_diff(ops, fromfile=args.file1, tofile=args.file2,
-                      context=args.context, moves=moves,
-                      ignore_blank_lines=args.ignore_blank_lines,
-                      algorithm=args.algorithm)
+            html_diff(
+                ops,
+                fromfile=args.file1,
+                tofile=args.file2,
+                context=args.context,
+                moves=moves,
+                ignore_blank_lines=args.ignore_blank_lines,
+                algorithm=args.algorithm,
+            )
         ]
     elif args.side_by_side:
-        chunks = render_side_by_side(ops, args.width, args.suppress_common_lines,
-                                     color, args.algorithm, moves, args.dim_moved)
+        chunks = render_side_by_side(
+            ops,
+            args.width,
+            args.suppress_common_lines,
+            color,
+            args.algorithm,
+            moves,
+            args.dim_moved,
+            args.ignore_blank_lines,
+            args.context,
+        )
     elif not changed:
         return 0
     else:
+        lines = list(
+            unified_diff(
+                ops,
+                args.context,
+                fromfile=args.file1,
+                tofile=args.file2,
+                fromfiledate=a_date,
+                tofiledate=b_date,
+                ignore_blank_lines=args.ignore_blank_lines,
+            )
+        )
         mode = "words" if args.color_words else "color" if color else "plain"
         chunks = render(lines, mode, args.algorithm, moves, args.dim_moved)
 

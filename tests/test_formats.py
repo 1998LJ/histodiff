@@ -77,9 +77,20 @@ def test_side_by_side_truncates_and_expands_tabs() -> None:
     assert lines[1] == "        x | " + "        y"
 
 
+def test_side_by_side_uses_terminal_width_for_unicode() -> None:
+    lines = list(side_by_side(diff(["界ab"], ["界ab"]), width=13, lineterm=""))
+    assert lines == ["界ab" + " " * 4 + "界ab"]
+
+    truncated = list(side_by_side(diff(["界abc"], ["界abc"]), width=11, lineterm=""))
+    assert truncated == ["界ab" + " " * 3 + "界ab"]
+
+
 def test_side_by_side_suppress_common_lines() -> None:
-    lines = list(side_by_side(diff(SBS_OLD, SBS_NEW), width=21, lineterm="",
-                              suppress_common_lines=True))
+    lines = list(
+        side_by_side(
+            diff(SBS_OLD, SBS_NEW), width=21, lineterm="", suppress_common_lines=True
+        )
+    )
     assert lines == [SBS_EXPECTED[1], SBS_EXPECTED[3]]
 
 
@@ -96,14 +107,18 @@ def test_cli_side_by_side(tmp_path, capsys) -> None:
     assert main([old, new, "-y", "-W", "21"]) == 1
     assert capsys.readouterr().out.splitlines() == SBS_EXPECTED
 
-    assert main([old, new, "--side-by-side", "--width", "21",
-                 "--suppress-common-lines"]) == 1
+    assert (
+        main([old, new, "--side-by-side", "--width", "21", "--suppress-common-lines"])
+        == 1
+    )
     assert capsys.readouterr().out.splitlines() == [SBS_EXPECTED[1], SBS_EXPECTED[3]]
 
     # Identical files: exit 0, but still print both columns, like diff -y.
     assert main([old, old, "-y", "-W", "21"]) == 0
     assert capsys.readouterr().out.splitlines() == [
-        "a" + " " * 11 + "a", "bb" + " " * 10 + "bb", "c" + " " * 11 + "c"
+        "a" + " " * 11 + "a",
+        "bb" + " " * 10 + "bb",
+        "c" + " " * 11 + "c",
     ]
 
 
@@ -127,6 +142,26 @@ def test_cli_side_by_side_moves(tmp_path, capsys) -> None:
     out = capsys.readouterr().out
     assert f"{BOLD}{MAGENTA}def func_1(data):{RESET}" in out
     assert " < \n" not in out  # trailing spaces are stripped
+
+
+def test_side_by_side_ignores_blank_only_hunks(tmp_path, capsys) -> None:
+    old_lines = ["a\n", "b\n"]
+    new_lines = ["a\n", "\n", "b\n"]
+    rendered = list(
+        side_by_side(diff(old_lines, new_lines), width=13, ignore_blank_lines=True)
+    )
+    assert [line.rstrip("\n") for line in rendered] == [
+        "a" + " " * 7 + "a",
+        "b" + " " * 7 + "b",
+    ]
+
+    old = write(tmp_path / "old", ["a", "b"])
+    new = write(tmp_path / "new", ["a", "", "b"])
+    assert main([old, new, "-B", "-y", "-W", "13"]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "a" + " " * 7 + "a",
+        "b" + " " * 7 + "b",
+    ]
 
 
 def test_cli_output_formats_are_exclusive(tmp_path) -> None:
@@ -270,17 +305,32 @@ def test_cli_html(tmp_path, capsys) -> None:
 
 def test_json_schema() -> None:
     ops = diff(["a\n", "b\n"], ["a\n", "c\n", "d\n"])
-    doc = json.loads(to_json(ops, fromfile="x.txt", tofile="y.txt",
-                             algorithm="histogram"))
+    doc = json.loads(
+        to_json(ops, fromfile="x.txt", tofile="y.txt", algorithm="histogram")
+    )
     assert doc["version"] == 1
     assert doc["algorithm"] == "histogram"
     assert doc["old"] == {"path": "x.txt", "length": 2}
     assert doc["new"] == {"path": "y.txt", "length": 3}
     assert doc["ops"] == [
-        {"tag": "equal", "a_start": 0, "a_end": 1, "b_start": 0, "b_end": 1,
-         "a_lines": ["a\n"], "b_lines": ["a\n"]},
-        {"tag": "replace", "a_start": 1, "a_end": 2, "b_start": 1, "b_end": 3,
-         "a_lines": ["b\n"], "b_lines": ["c\n", "d\n"]},
+        {
+            "tag": "equal",
+            "a_start": 0,
+            "a_end": 1,
+            "b_start": 0,
+            "b_end": 1,
+            "a_lines": ["a\n"],
+            "b_lines": ["a\n"],
+        },
+        {
+            "tag": "replace",
+            "a_start": 1,
+            "a_end": 2,
+            "b_start": 1,
+            "b_end": 3,
+            "a_lines": ["b\n"],
+            "b_lines": ["c\n", "d\n"],
+        },
     ]
     assert "moves" not in doc
 
@@ -308,11 +358,22 @@ def test_json_moves() -> None:
     ops = diff([long_line, "keep = 1"], ["keep = 1", long_line])
     doc = json.loads(to_json(ops, moves=find_moves(ops)))
     assert doc["moves"] == [
-        {"a_start": 0, "a_end": 1, "b_start": 1, "b_end": 2,
-         "a_lines": [long_line], "b_lines": [long_line]}
+        {
+            "a_start": 0,
+            "a_end": 1,
+            "b_start": 1,
+            "b_end": 2,
+            "a_lines": [long_line],
+            "b_lines": [long_line],
+        }
     ]
-    doc = json.loads(to_json(ops, moves=[Move(0, 1, 1, 2, (long_line,), (long_line,))],
-                             include_lines=False))
+    doc = json.loads(
+        to_json(
+            ops,
+            moves=[Move(0, 1, 1, 2, (long_line,), (long_line,))],
+            include_lines=False,
+        )
+    )
     assert doc["moves"] == [{"a_start": 0, "a_end": 1, "b_start": 1, "b_end": 2}]
 
 
@@ -325,11 +386,154 @@ def test_from_json_rejects_other_documents() -> None:
         from_json("[]")
     with pytest.raises(ValueError, match="histodiff JSON"):
         from_json('{"version": 2, "ops": []}')
-    bad = {"version": 1, "ops": [{"tag": "shuffle", "a_start": 0, "a_end": 0,
-                                  "b_start": 0, "b_end": 0,
-                                  "a_lines": [], "b_lines": []}]}
+    bad = {
+        "version": 1,
+        "old": {"length": 0},
+        "new": {"length": 0},
+        "ops": [
+            {
+                "tag": "shuffle",
+                "a_start": 0,
+                "a_end": 0,
+                "b_start": 0,
+                "b_end": 0,
+                "a_lines": [],
+                "b_lines": [],
+            }
+        ],
+    }
     with pytest.raises(ValueError, match="tag"):
         from_json(json.dumps(bad))
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {"version": 1},
+        {"version": True, "old": {"length": 0}, "new": {"length": 0}, "ops": []},
+        {"version": 1, "old": {"length": 0}, "new": {"length": 0}, "ops": None},
+        {"version": 1, "old": {"length": 0}, "new": {"length": 0}, "ops": [1]},
+        {"version": 1, "ops": []},
+        {
+            "version": 1,
+            "old": {"length": 0},
+            "new": {"length": 0},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": -1,
+                    "a_end": 0,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": [],
+                    "b_lines": ["x"],
+                }
+            ],
+        },
+        {
+            "version": 1,
+            "old": {"length": 1},
+            "new": {"length": 1},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 0,
+                    "a_end": 1,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": [],
+                    "b_lines": ["x"],
+                }
+            ],
+        },
+        {
+            "version": 1,
+            "old": {"length": 1},
+            "new": {"length": 0},
+            "ops": [
+                {
+                    "tag": "insert",
+                    "a_start": 0,
+                    "a_end": 1,
+                    "b_start": 0,
+                    "b_end": 0,
+                    "a_lines": ["x"],
+                    "b_lines": [],
+                }
+            ],
+        },
+        {
+            "version": 1,
+            "old": {"length": 2},
+            "new": {"length": 1},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 1,
+                    "a_end": 2,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": ["x"],
+                    "b_lines": ["x"],
+                }
+            ],
+        },
+        {
+            "version": 1,
+            "old": {"length": 2},
+            "new": {"length": 2},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 0,
+                    "a_end": 1,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": ["x"],
+                    "b_lines": ["x"],
+                },
+                {
+                    "tag": "equal",
+                    "a_start": 1,
+                    "a_end": 2,
+                    "b_start": 1,
+                    "b_end": 2,
+                    "a_lines": ["y"],
+                    "b_lines": ["y"],
+                },
+            ],
+        },
+        {"version": 1, "old": {"length": 1}, "new": {"length": 0}, "ops": []},
+    ],
+)
+def test_from_json_rejects_malformed_operations(document) -> None:
+    with pytest.raises(ValueError):
+        from_json(json.dumps(document))
+
+
+def test_from_json_rejects_malformed_moves() -> None:
+    document = json.loads(to_json(diff(["old"], ["new"])))
+    document["moves"] = "not a list"
+    with pytest.raises(ValueError, match="moves"):
+        from_json(json.dumps(document))
+
+    document["moves"] = [{"a_start": 0, "a_end": 2, "b_start": 0, "b_end": 2}]
+    with pytest.raises(ValueError, match="outside"):
+        from_json(json.dumps(document))
+
+
+def test_json_marks_blank_only_hunks_as_ignored(tmp_path, capsys) -> None:
+    old = write(tmp_path / "old", ["a", "b"])
+    new = write(tmp_path / "new", ["a", "", "b"])
+    assert main([old, new, "-B", "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert document["ignore_blank_lines"] is True
+    assert document["has_changes"] is False
+    assert [entry.get("ignored", False) for entry in document["ops"]] == [
+        False,
+        True,
+        False,
+    ]
 
 
 def test_cli_json(tmp_path, capsys) -> None:

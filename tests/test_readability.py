@@ -101,8 +101,14 @@ def test_unique_block_in_repeated_yaml() -> None:
 def config_section(i: int) -> list[str]:
     # Every section repeats `enabled`, `timeout`, `retries` and a blank line,
     # so only the header and port are unique.
-    return [f"[svc{i}]", "enabled = true", f"port = {8000 + i}", "timeout = 30",
-            "retries = 3", ""]
+    return [
+        f"[svc{i}]",
+        "enabled = true",
+        f"port = {8000 + i}",
+        "timeout = 30",
+        "retries = 3",
+        "",
+    ]
 
 
 @pytest.mark.parametrize("algorithm", ["patience", "histogram"])
@@ -126,8 +132,10 @@ def test_config_section_moved_to_end(algorithm: str) -> None:
 def test_swapped_sections_show_only_the_differing_lines() -> None:
     sections = [config_section(i) for i in range(45)]
     old = sum(sections, [])
-    new = sum(sections[:5] + [sections[30]] + sections[6:30] + [sections[5]]
-              + sections[31:], [])
+    new = sum(
+        sections[:5] + [sections[30]] + sections[6:30] + [sections[5]] + sections[31:],
+        [],
+    )
 
     ops = diff(old, new)
     check_valid(old, new, ops)
@@ -154,8 +162,9 @@ def test_test_function_moved() -> None:
 
     names = [f"endpoint_{i}" for i in range(40)]
     old = sum((test_func(n) for n in names), [])
-    new = sum((test_func(n) for n in names[:2] + names[3:25] + [names[2]]
-               + names[25:]), [])
+    new = sum(
+        (test_func(n) for n in names[:2] + names[3:25] + [names[2]] + names[25:]), []
+    )
 
     ops = diff(old, new)
     check_valid(old, new, ops)
@@ -227,8 +236,13 @@ def helpers_block(count: int) -> list[str]:
     out: list[str] = []
     for i in range(count):
         # Shares `config = load()`, `return 0` and blank lines with ANCHOR.
-        out += [f"def helper_{i}():", "    config = load()", f"    step_{i}(config)",
-                "    return 0", ""]
+        out += [
+            f"def helper_{i}():",
+            "    config = load()",
+            f"    step_{i}(config)",
+            "    return 0",
+            "",
+        ]
     return out
 
 

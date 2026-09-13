@@ -66,8 +66,9 @@ def test_same_results_as_difflib_when_alignments_agree() -> None:
 
 
 def test_character_sequences() -> None:
-    sm = SequenceMatcher(None, "private Thread currentThread;",
-                         "private volatile Thread currentThread;")
+    sm = SequenceMatcher(
+        None, "private Thread currentThread;", "private volatile Thread currentThread;"
+    )
     assert sm.get_opcodes() == [
         ("equal", 0, 8, 0, 8),
         ("insert", 8, 8, 8, 17),

@@ -233,7 +233,12 @@ def _slide_groups(
 
 
 def trim_common(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int,
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
     matches: list[Match],
 ) -> tuple[int, int, int, int]:
     """Match the common prefix and suffix of a region; return the shrunk bounds."""

@@ -52,15 +52,7 @@ def test_simple_change() -> None:
     a = ["one\n", "two\n", "three\n", "four\n", "five\n"]
     b = ["one\n", "two\n", "3\n", "four\n", "five\n"]
     text = "".join(unified_diff(diff(a, b), context=1, fromfile="a", tofile="b"))
-    assert text == (
-        "--- a\n"
-        "+++ b\n"
-        "@@ -2,3 +2,3 @@\n"
-        " two\n"
-        "-three\n"
-        "+3\n"
-        " four\n"
-    )
+    assert text == ("--- a\n+++ b\n@@ -2,3 +2,3 @@\n two\n-three\n+3\n four\n")
 
 
 def test_separate_hunks_and_lineterm() -> None:
@@ -78,10 +70,17 @@ def test_separate_hunks_and_lineterm() -> None:
 
 def test_insert_into_empty_and_delete_everything() -> None:
     assert list(unified_diff(diff([], ["x\n"]))) == [
-        "--- \n", "+++ \n", "@@ -0,0 +1 @@\n", "+x\n"
+        "--- \n",
+        "+++ \n",
+        "@@ -0,0 +1 @@\n",
+        "+x\n",
     ]
     assert list(unified_diff(diff(["x\n", "y\n"], []))) == [
-        "--- \n", "+++ \n", "@@ -1,2 +0,0 @@\n", "-x\n", "-y\n"
+        "--- \n",
+        "+++ \n",
+        "@@ -1,2 +0,0 @@\n",
+        "-x\n",
+        "-y\n",
     ]
 
 

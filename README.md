@@ -82,7 +82,7 @@ from histodiff import diff, unified_diff
 old = open("old.py").readlines()
 new = open("new.py").readlines()
 
-ops = diff(old, new)                      # algorithm="histogram" by default
+ops = diff(old, new)  # algorithm="histogram" by default
 for op in ops:
     if op.tag != "equal":
         print(op.tag, op.a_start, op.a_end, op.b_start, op.b_end)
@@ -103,8 +103,8 @@ Each algorithm is also available directly, with the same return type:
 from histodiff import histogram_diff, myers_diff, patience_diff
 
 ops = patience_diff(old, new)
-ops = diff(old, new, algorithm="myers")   # equivalent to myers_diff(old, new)
-ops = diff(old, new, minimal=True)        # never trade diff size for speed
+ops = diff(old, new, algorithm="myers")  # equivalent to myers_diff(old, new)
+ops = diff(old, new, minimal=True)  # never trade diff size for speed
 ```
 
 ### Ignoring whitespace
@@ -117,9 +117,9 @@ lines:
 ```python
 from histodiff import diff, ignore_all_space, ignore_space_change, unified_diff
 
-ops = diff(old, new, key=ignore_space_change)   # like diff -b
-ops = diff(old, new, key=ignore_all_space)      # like diff -w
-print("".join(unified_diff(ops, ignore_blank_lines=True)))   # like diff -B
+ops = diff(old, new, key=ignore_space_change)  # like diff -b
+ops = diff(old, new, key=ignore_all_space)  # like diff -w
+print("".join(unified_diff(ops, ignore_blank_lines=True)))  # like diff -B
 ```
 
 - `ignore_space_change` ignores trailing whitespace and treats any run of
@@ -161,8 +161,10 @@ inserted somewhere else:
 from histodiff import diff, find_moves
 
 for move in find_moves(diff(old, new)):
-    print(f"lines {move.a_start + 1}-{move.a_end} moved to "
-          f"{move.b_start + 1}-{move.b_end}")
+    print(
+        f"lines {move.a_start + 1}-{move.a_end} moved to "
+        f"{move.b_start + 1}-{move.b_end}"
+    )
 ```
 
 Each `Move` holds the positions on both sides plus the lines themselves
@@ -177,7 +179,8 @@ from histodiff import diff, from_json, html_diff, side_by_side, to_json
 
 ops = diff(old, new)
 
-print("".join(side_by_side(ops, width=100)))             # like diff -y
+print("".join(side_by_side(ops, width=100)))  # like diff -y
+print("".join(side_by_side(ops, ignore_blank_lines=True)))
 
 with open("diff.html", "w") as page:
     page.write(html_diff(ops, fromfile="old.py", tofile="new.py"))
@@ -188,6 +191,8 @@ assert from_json(payload) == ops
 
 - `side_by_side_rows(ops)` gives you the paired rows, with a mark, both
   line numbers and both texts, if you want to lay them out yourself.
+- `side_by_side(..., ignore_blank_lines=True)` hides blank-only hunks with
+  the same context-sensitive rules as `unified_diff`.
 - `html_diff(..., full_page=False)` returns just the `<table>`. You can embed
   it in your own page along with `HTML_STYLE`.
 - The JSON is a versioned object:
@@ -202,7 +207,10 @@ assert from_json(payload) == ops
 
   Indices are 0-based and ranges are half-open, as in `DiffOp`. Pass
   `include_lines=False` to leave out the text, and `moves=` to include
-  moved blocks.
+  moved blocks. With `ignore_blank_lines=True`, ignored operations remain in
+  the document so its ranges still cover the original files; they receive an
+  `"ignored": true` field, while top-level `has_changes` reports whether any
+  effective difference remains.
 
 ### Words, tokens and records
 
@@ -216,16 +224,16 @@ new = "the quick red fox jumped".split()
 [(op.tag, op.a_lines, op.b_lines) for op in diff(old, new) if op.tag != "equal"]
 # [('replace', ('brown',), ('red',)), ('replace', ('jumps',), ('jumped',))]
 
-diff([1, 2, 3, 4], [1, 3, 4, 5])          # numbers, tuples, named tuples,
-                                          # frozen dataclasses...
+diff([1, 2, 3, 4], [1, 3, 4, 5])  # numbers, tuples, named tuples,
+# frozen dataclasses...
 ```
 
 Pass `key` to compare items by a derived value, as with `sorted(key=...)`.
 The ops still hold your original items:
 
 ```python
-diff(old_lines, new_lines, key=str.strip)       # ignore indentation/trailing spaces
-diff(old_words, new_words, key=str.casefold)    # ignore case
+diff(old_lines, new_lines, key=str.strip)  # ignore indentation/trailing spaces
+diff(old_words, new_words, key=str.casefold)  # ignore case
 
 # dicts aren't hashable, so compare them by their contents
 diff(old_rows, new_rows, key=lambda row: tuple(sorted(row.items())))
@@ -245,12 +253,12 @@ histodiff's alignment:
 # from difflib import SequenceMatcher
 from histodiff import SequenceMatcher
 
-sm = SequenceMatcher(None, old, new)      # same signature as difflib
-sm.get_opcodes()                          # [('equal', 0, 5, 0, 5), ...]
-sm.get_grouped_opcodes(3)                 # hunks, as in difflib
-sm.ratio()                                # similarity from the better alignment
+sm = SequenceMatcher(None, old, new)  # same signature as difflib
+sm.get_opcodes()  # [('equal', 0, 5, 0, 5), ...]
+sm.get_grouped_opcodes(3)  # hunks, as in difflib
+sm.ratio()  # similarity from the better alignment
 
-SequenceMatcher(None, old, new, algorithm="patience")   # pick an algorithm
+SequenceMatcher(None, old, new, algorithm="patience")  # pick an algorithm
 ```
 
 Like difflib's, it works on any sequences of hashable items, including
@@ -311,6 +319,9 @@ numbers and word highlighting, which follows the reader's light or dark
 theme; `-U` controls its context. `--json` prints the diff operations,
 including their lines, and any moved blocks, for other tools to consume.
 These formats print output even when the files are identical.
+`-B` is honored by every format. JSON retains ignored operations for source
+fidelity, marks them as ignored, and reports the effective result in
+`has_changes`.
 
 As with `diff`, the exit status is 0 when the files are identical (or differ
 only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:
@@ -392,6 +403,9 @@ Before opening a pull request, make sure the tests and linter pass:
 ```bash
 pytest                          # unit, readability and CLI tests
 ruff check .                    # lint
+ruff format --check .           # formatting
+mypy src                        # public and internal types
+python -m build                 # wheel and source distribution
 python examples/before_after.py # the README comparison still holds
 ```
 

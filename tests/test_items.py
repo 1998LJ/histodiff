@@ -101,9 +101,7 @@ def test_records(func) -> None:
 
     events_a = [Event("start", 0), Event("tick", 1), Event("stop", 2)]
     events_b = [Event("start", 0), Event("stop", 2)]
-    assert changes(func(events_a, events_b)) == [
-        ("delete", (Event("tick", 1),), ())
-    ]
+    assert changes(func(events_a, events_b)) == [("delete", (Event("tick", 1),), ())]
 
 
 @pytest.mark.parametrize("func", FUNCS)
@@ -131,9 +129,7 @@ def test_random_integer_sequences(func) -> None:
         ops = func(ints_a, ints_b)
         check(ints_a, ints_b, ops)
         # Same alignment as the equivalent strings.
-        assert [op.as_opcode() for op in ops] == [
-            op.as_opcode() for op in func(a, b)
-        ]
+        assert [op.as_opcode() for op in ops] == [op.as_opcode() for op in func(a, b)]
 
 
 def test_equality_is_hash_and_eq_like_difflib() -> None:
