@@ -8,25 +8,56 @@ overlapping diagonal ("middle snake") lies on an optimal path, so the
 problem splits into two smaller boxes on either side of it.
 
 Time is O((N+M)·D) and memory is O(N+M), where D is the size of the
-minimal edit script.
+minimal edit script. When D is large - two big, mostly unrelated inputs -
+that is quadratic, so by default the search is capped the way Git caps it
+(``xdl_split`` in ``xdiffi.c``): once a split has cost more than
+:func:`max_cost` edits, it stops looking for the optimal split and cuts at
+the furthest point either search has reached. The result is still a
+correct diff, just not always the smallest one. Pass ``minimal=True`` to
+disable the cap.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from math import isqrt
 
 from ._core import DiffOp, Match, build_ops, intern_lines, trim_common
 
-__all__ = ["myers_diff"]
+__all__ = ["MIN_COST", "max_cost", "myers_diff"]
+
+#: Lower bound for the per-split edit budget; see :func:`max_cost`.
+MIN_COST = 256
+
+
+def max_cost(size: int) -> int:
+    """Edit budget per split for a region with ``size`` lines in total.
+
+    Same shape as Git's: the square root of the input size, but never less
+    than :data:`MIN_COST`, so ordinary diffs never hit the cap.
+    """
+    return max(isqrt(size + 3), MIN_COST)
 
 
 def _middle_snake(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
+    cost: int,
 ) -> tuple[int, int, int, int]:
-    """Find the middle snake of the box ``a[alo:ahi]`` x ``b[blo:bhi]``.
+    """Find a split point for the box ``a[alo:ahi]`` x ``b[blo:bhi]``.
 
     Returns ``(x_start, y_start, x_end, y_end)`` in absolute indices: a run
-    of matching lines (possibly empty) that lies on a shortest edit path.
+    of matching lines (possibly empty) to keep, with the two sub-boxes on
+    either side still to be diffed. Normally this is the middle snake of an
+    optimal path; if the search needs ``cost`` or more edits, it is instead
+    an empty run at the furthest-reaching point of either search.
+
+    The box must be non-empty on both sides with differing first and last
+    lines (see :func:`trim_common`).
 
     Coordinates below are relative to the box. ``x`` indexes ``a``, ``y``
     indexes ``b`` and diagonal ``k = x - y``. ``vf[k]`` is the furthest
@@ -39,7 +70,7 @@ def _middle_snake(
     delta = n - m
     odd = delta & 1
     max_d = (n + m + 1) // 2
-    size = 2 * max_d + 1
+    size = 2 * min(max_d, cost) + 1
     vf = [0] * size
     vb = [0] * size
     vf[1] = 0
@@ -78,16 +109,45 @@ def _middle_snake(
             if not odd and -d <= k <= d and x <= vf[k]:
                 return alo + x, blo + y, alo + x1, blo + y1
 
+        if d >= cost:
+            # Too expensive: split at whichever frontier point has covered
+            # the most ground. Diagonals near the edge can overshoot the
+            # box, so only in-bounds points count.
+            best = bx = by = 0
+            for k in range(d, -d - 1, -2):
+                x = vf[k]
+                y = x - k
+                if 0 <= x <= n and 0 <= y <= m and x + y > best:
+                    best, bx, by = x + y, x, y
+            for c in range(d, -d - 1, -2):
+                y = vb[c]
+                x = y + c + delta
+                if 0 <= x <= n and 0 <= y <= m and n + m - x - y > best:
+                    best, bx, by = n + m - x - y, x, y
+            # A point strictly inside the box makes both halves smaller.
+            if 0 < bx + by < n + m:
+                return alo + bx, blo + by, alo + bx, blo + by
+
     raise AssertionError("unreachable: Myers search found no middle snake")
 
 
 def myers_matches(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
+    minimal: bool = False,
 ) -> list[Match]:
-    """Return the matched ``(i, j)`` pairs of a minimal diff of two regions.
+    """Return the matched ``(i, j)`` pairs of a diff of two regions.
 
-    The result is *not* sorted; callers sort once at the end.
+    The result is *not* sorted; callers sort once at the end. With
+    ``minimal=False`` the per-split search is capped at :func:`max_cost`.
     """
+    total = (ahi - alo) + (bhi - blo)
+    # No sub-box can need more than `total` edits, so that disables the cap.
+    cost = total + 1 if minimal else max_cost(total)
     matches: list[Match] = []
     stack = [(alo, ahi, blo, bhi)]
     while stack:
@@ -96,23 +156,29 @@ def myers_matches(
         if alo == ahi or blo == bhi:
             continue
         # After trimming, both regions are non-empty and start/end with
-        # different lines, so D >= 2 and both sub-boxes are strictly smaller.
-        xs, ys, xe, ye = _middle_snake(a, alo, ahi, b, blo, bhi)
+        # different lines, so both sub-boxes are strictly smaller.
+        xs, ys, xe, ye = _middle_snake(a, alo, ahi, b, blo, bhi, cost)
         matches.extend((xs + i, ys + i) for i in range(xe - xs))
         stack.append((alo, xs, blo, ys))
         stack.append((xe, ahi, ye, bhi))
     return matches
 
 
-def myers_diff(a: Sequence[str], b: Sequence[str]) -> list[DiffOp]:
+def myers_diff(
+    a: Sequence[str], b: Sequence[str], *, minimal: bool = False
+) -> list[DiffOp]:
     """Diff two sequences of lines with Myers' algorithm.
 
-    Produces a minimal edit script (the fewest inserted plus deleted lines).
-    Minimal is not always readable: Myers will happily match stray ``}`` or
+    Produces the smallest edit script (fewest inserted plus deleted lines)
+    unless the inputs are large and very different, where the search is
+    capped like Git's to avoid quadratic run time; pass ``minimal=True`` to
+    always get the smallest script, however long it takes.
+
+    Small is not always readable: Myers will happily match stray ``}`` or
     blank lines, which can shred a moved block into many small hunks. See
     :func:`histodiff.patience_diff` and :func:`histodiff.histogram_diff`.
     """
     ia, ib = intern_lines(a, b)
-    matches = myers_matches(ia, 0, len(ia), ib, 0, len(ib))
+    matches = myers_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
     matches.sort()
     return build_ops(a, b, matches)

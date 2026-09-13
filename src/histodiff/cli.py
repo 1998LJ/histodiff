@@ -42,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="diff algorithm to use (default: %(default)s)",
     )
     parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="always find the smallest diff, even if that is very slow on large, "
+        "very different files",
+    )
+    parser.add_argument(
         "--color",
         action="store_true",
         help="color the output with ANSI escapes (green additions, red deletions)",
@@ -119,7 +125,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"histodiff: {name}: {exc.strerror or exc}", file=sys.stderr)
         return 2
 
-    ops = diff(a, b, algorithm=args.algorithm)
+    ops = diff(a, b, algorithm=args.algorithm, minimal=args.minimal)
     if all(op.tag == "equal" for op in ops):
         return 0
 

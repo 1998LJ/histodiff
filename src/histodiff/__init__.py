@@ -23,7 +23,7 @@ __all__ = [
 __version__ = "0.1.0"
 
 #: Algorithm name -> implementation, for :func:`diff` and the CLI.
-ALGORITHMS: dict[str, Callable[[Sequence[str], Sequence[str]], list[DiffOp]]] = {
+ALGORITHMS: dict[str, Callable[..., list[DiffOp]]] = {
     "myers": myers_diff,
     "patience": patience_diff,
     "histogram": histogram_diff,
@@ -31,13 +31,22 @@ ALGORITHMS: dict[str, Callable[[Sequence[str], Sequence[str]], list[DiffOp]]] = 
 
 
 def diff(
-    a: Sequence[str], b: Sequence[str], algorithm: str = "histogram"
+    a: Sequence[str],
+    b: Sequence[str],
+    algorithm: str = "histogram",
+    *,
+    minimal: bool = False,
 ) -> list[DiffOp]:
     """Diff two sequences of lines.
 
     :param a: the old lines.
     :param b: the new lines.
     :param algorithm: ``"histogram"`` (default), ``"patience"`` or ``"myers"``.
+    :param minimal: never trade diff size for speed. By default Myers (and
+        the Myers fallback inside patience and histogram) caps its search on
+        large, very different inputs, like ``git diff`` does; with
+        ``minimal=True`` it always finds the smallest edit script, which can
+        take quadratic time.
     :returns: :class:`DiffOp` objects that together cover all of ``a`` and ``b``.
     :raises ValueError: if ``algorithm`` is not recognised.
     """
@@ -48,4 +57,4 @@ def diff(
         raise ValueError(
             f"unknown algorithm {algorithm!r}; expected one of {choices}"
         ) from None
-    return func(a, b)
+    return func(a, b, minimal=minimal)

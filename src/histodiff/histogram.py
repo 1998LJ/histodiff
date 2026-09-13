@@ -100,9 +100,18 @@ def _find_run(
 
 
 def histogram_matches(
-    a: Sequence[int], alo: int, ahi: int, b: Sequence[int], blo: int, bhi: int
+    a: Sequence[int],
+    alo: int,
+    ahi: int,
+    b: Sequence[int],
+    blo: int,
+    bhi: int,
+    minimal: bool = False,
 ) -> list[Match]:
-    """Return (unsorted) matched ``(i, j)`` pairs for two regions."""
+    """Return (unsorted) matched ``(i, j)`` pairs for two regions.
+
+    ``minimal`` is passed to the Myers fallback.
+    """
     matches: list[Match] = []
     stack = [(alo, ahi, blo, bhi)]
     while stack:
@@ -113,7 +122,7 @@ def histogram_matches(
         run, has_common = _find_run(a, alo, ahi, b, blo, bhi)
         if run is None:
             if has_common:
-                matches.extend(myers_matches(a, alo, ahi, b, blo, bhi))
+                matches.extend(myers_matches(a, alo, ahi, b, blo, bhi, minimal))
             continue
         a_start, a_end, b_start, b_end = run
         matches.extend((a_start + t, b_start + t) for t in range(a_end - a_start))
@@ -122,15 +131,18 @@ def histogram_matches(
     return matches
 
 
-def histogram_diff(a: Sequence[str], b: Sequence[str]) -> list[DiffOp]:
+def histogram_diff(
+    a: Sequence[str], b: Sequence[str], *, minimal: bool = False
+) -> list[DiffOp]:
     """Diff two sequences of lines with the histogram algorithm.
 
     Like patience diff, but anchors on the rarest matching lines rather than
     only strictly unique ones, so it still produces readable output when
     every line repeats somewhere. This is Git's recommended algorithm and
-    histodiff's default.
+    histodiff's default. ``minimal=True`` disables the cost cap of the
+    Myers fallback (see :func:`histodiff.myers_diff`).
     """
     ia, ib = intern_lines(a, b)
-    matches = histogram_matches(ia, 0, len(ia), ib, 0, len(ib))
+    matches = histogram_matches(ia, 0, len(ia), ib, 0, len(ib), minimal)
     matches.sort()
     return build_ops(a, b, matches)
