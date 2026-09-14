@@ -1,40 +1,18 @@
 # histodiff
 
-**Human-readable diffs for code and structured text containing moved, repeated,
-or reformatted blocks.**
+**Human-readable diffs for code and structured text containing moved, repeated, or reformatted blocks.**
 
-Use histodiff when Python's `difflib` turns a small structural change into a
-large, noisy diff. Its Git-inspired histogram alignment starts from distinctive
-lines, then readability cleanup keeps change boundaries natural. You can switch
-to patience or Myers alignment, detect moved blocks, highlight changed words,
-ignore whitespace, and render unified, side-by-side, HTML, or versioned JSON
-output. The same API works with text, tokens, and other Python sequences,
-includes a `difflib.SequenceMatcher`-compatible class, and has no runtime
-dependencies.
-
-## Why
-
-A diff tool has to decide which lines in the old file "are" which lines in
-the new one. Python's `difflib` grabs the longest stretch of identical lines
-it can find and works outward from there. In files of 200 lines or more it
-also refuses to line up on lines that appear often, such as blank lines or
-repeated boilerplate. `difflib.unified_diff` gives you no way to turn that
-off. Move one function to the bottom of a file, and difflib can end up
-reporting that almost the whole file was deleted and re-added.
-
-By default, histodiff lines files up on their *distinctive* lines first: a
-function name, a section header, the one row of data that changed. Everything
-else falls into place around those. A one-line change stays a one-line change,
-and change blocks start and end at natural boundaries such as blank lines rather
-than halfway through a block. Optional move detection can then pair a deleted
-block with an identical block inserted elsewhere.
+[![CI](https://github.com/rmnvg/histodiff/actions/workflows/ci.yml/badge.svg)](https://github.com/rmnvg/histodiff/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/histodiff.svg)](https://pypi.org/project/histodiff/)
+![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/rmnvg/histodiff/blob/main/LICENSE)
 
 ## Before and after
 
 A function moved from the top of a 240-line module to the bottom, from
-[`examples/before_after.py`](examples/before_after.py). Both columns use the
-same unified-diff formatter, so every difference comes from how the lines
-were matched up:
+[`examples/before_after.py`](https://github.com/rmnvg/histodiff/blob/main/examples/before_after.py).
+Both columns use the same unified-diff formatter, so every difference comes
+from how the lines were matched up:
 
 ```
 difflib                                              | histodiff (histogram)
@@ -70,17 +48,128 @@ hunks                    2           2
 changed lines          448          16
 ```
 
-Run `python examples/before_after.py` for this and two more scenarios: a
-single changed row in a repetitive CSV file (difflib: 301 changed lines,
-histodiff: 1), and a small config file where both report the same number of
-changes but difflib's change block begins in the middle of a section.
+Run `python examples/before_after.py` (after cloning the repository) for this
+and two more scenarios: a single changed row in a repetitive CSV file
+(difflib: 301 changed lines, histodiff: 1), and a small config file where
+both report the same number of changes but difflib's change block begins in
+the middle of a section. Ten further, larger scenarios - comparing difflib,
+all three histodiff algorithms, and the third-party `patiencediff` package -
+are in [Real-world corpus](#real-world-corpus).
 
-## Real-world corpus
+## Installation
 
-[`examples/real_world_corpus.py`](examples/real_world_corpus.py) runs ten
-more scenarios - a moved function, a moved-and-edited function, a reordered
-import block, a moved Markdown section, a value changed in a large repetitive
-YAML file, a row inserted into a large CSV, code wrapped in a new
+```bash
+pip install histodiff
+```
+
+Requires Python 3.9+. No dependencies.
+
+## Quick start
+
+### A Python example
+
+```python
+from histodiff import diff, unified_diff
+
+old = open("old.py").readlines()
+new = open("new.py").readlines()
+
+ops = diff(old, new)  # histogram alignment by default
+print("".join(unified_diff(ops, fromfile="old.py", tofile="new.py")))
+```
+
+### A command-line and Git example
+
+```bash
+histodiff old.py new.py --color            # unified diff, changed words highlighted
+git config diff.external git-histodiff     # make `git diff` use histodiff too
+```
+
+That's the core of it. [Documentation](#documentation) below covers the three
+algorithms, ignoring whitespace, moved-block detection, word highlighting,
+side-by-side/HTML/JSON output, the full CLI, and Git integration in depth.
+
+## Feature comparison
+
+| Capability | difflib | patiencediff | histodiff |
+| --- | --- | --- | --- |
+| Histogram alignment | No | No | Yes |
+| Patience alignment | No | Yes | Yes |
+| Myers algorithm / minimal mode | No | No¹ | Yes |
+| Move detection | No | No | Yes |
+| Word-level highlighting | Character-level²  | No | Yes (word-tokenized) |
+| HTML output | Built-in³ | No | Yes |
+| Versioned JSON output | No | No | Yes |
+| Works on generic hashable sequences | Yes | Yes | Yes |
+| No runtime dependencies | Yes | Yes⁴ | Yes |
+
+Notes:
+
+1. patiencediff has no Myers option and no guaranteed-minimal mode. When a
+   region has no unique matching lines to anchor on, its matcher trims a
+   shared prefix or suffix but does not run a general fallback algorithm for
+   what's left between them - see [Real-world corpus](#real-world-corpus),
+   scenario 9, for what that looks like on two unrelated files.
+2. Not through `SequenceMatcher.get_opcodes()` or `difflib.unified_diff`, the
+   functions most difflib code calls. `difflib.Differ.compare()` marks
+   changed characters on separate `?` hint lines, and `difflib.HtmlDiff`
+   highlights the differing character span in its HTML table - both
+   character-level rather than word-tokenized, and both a different entry
+   point from difflib's main diffing API.
+3. `difflib.HtmlDiff` produces a complete, if dated-looking, side-by-side
+   HTML table, including the character-level highlighting from note 2.
+4. patiencediff itself has no further pip dependencies (it ships a
+   Rust-accelerated matcher with a pure-Python fallback), but check its
+   license before adding it: GPL-2.0-or-later at the time of writing, unlike
+   difflib (standard library) and histodiff (MIT).
+
+All three are usable as a line-based diff engine; only histodiff and
+patiencediff are true patience-family implementations, and only histodiff
+also offers histogram alignment, a Myers mode with a minimal-diff guarantee,
+and the move/word/HTML/JSON features above. See
+[Choosing an algorithm](#choosing-an-algorithm) for when to reach for which
+histodiff algorithm specifically.
+
+## Documentation
+
+- [Why histodiff](#why-histodiff)
+- [Real-world corpus](#real-world-corpus)
+- [Python](#python)
+- [Ignoring whitespace](#ignoring-whitespace)
+- [Changed words within lines](#changed-words-within-lines)
+- [Moved blocks](#moved-blocks)
+- [Other output formats](#other-output-formats)
+- [Words, tokens and records](#words-tokens-and-records)
+- [Coming from difflib](#coming-from-difflib)
+- [Command line](#command-line)
+- [Git integration](#git-integration)
+- [API stability](#api-stability)
+- [Choosing an algorithm](#choosing-an-algorithm)
+- [Performance](#performance)
+
+### Why histodiff
+
+A diff tool has to decide which lines in the old file "are" which lines in
+the new one. Python's `difflib` grabs the longest stretch of identical lines
+it can find and works outward from there. In files of 200 lines or more it
+also refuses to line up on lines that appear often, such as blank lines or
+repeated boilerplate. `difflib.unified_diff` gives you no way to turn that
+off. Move one function to the bottom of a file, and difflib can end up
+reporting that almost the whole file was deleted and re-added.
+
+By default, histodiff lines files up on their *distinctive* lines first: a
+function name, a section header, the one row of data that changed. Everything
+else falls into place around those. A one-line change stays a one-line change,
+and change blocks start and end at natural boundaries such as blank lines rather
+than halfway through a block. Optional move detection can then pair a deleted
+block with an identical block inserted elsewhere.
+
+### Real-world corpus
+
+[`examples/real_world_corpus.py`](https://github.com/rmnvg/histodiff/blob/main/examples/real_world_corpus.py)
+runs ten more scenarios - a moved function, a moved-and-edited function, a
+reordered import block, a moved Markdown section, a value changed in a large
+repetitive YAML file, a row inserted into a large CSV, code wrapped in a new
 conditional, a generated-looking record with one changed field, two unrelated
 files, and a plain one-line change - through `difflib`, all three histodiff
 algorithms, and (if you `pip install patiencediff`) the third-party
@@ -132,22 +221,20 @@ specifically because every tool ties:
 - **patiencediff**, the independent third-party implementation of the same
   patience idea, tracks histodiff's `patience`/`myers` results on every
   scenario except 9, where it instead tracks difflib - a sign that its
-  fallback for "no useful anchors at all" differs from histodiff's own.
+  fallback for "no useful anchors at all" differs from histodiff's own (see
+  note 1 under [Feature comparison](#feature-comparison)).
 
 Hunk counts, timings and (for the four larger scenarios) peak memory are in
 the script's own output, not reproduced here.
 
-## Installation
-
-```bash
-pip install histodiff
-```
-
-Requires Python 3.9+. No dependencies.
-
-## Usage
-
 ### Python
+
+`diff` returns a list of `DiffOp` dataclasses. Each op covers
+`a[a_start:a_end]` and `b[b_start:b_end]`, carries those lines in `a_lines`
+and `b_lines`, and has a `tag` of `"equal"`, `"insert"`, `"delete"` or
+`"replace"`. Indices follow `difflib.SequenceMatcher.get_opcodes()`, and
+`op.as_opcode()` returns the same tuple. `unified_diff` renders the same
+text `difflib.unified_diff` would for that alignment.
 
 ```python
 from histodiff import diff, unified_diff
@@ -162,13 +249,6 @@ for op in ops:
 
 print("".join(unified_diff(ops, context=3, fromfile="old.py", tofile="new.py")))
 ```
-
-`diff` returns a list of `DiffOp` dataclasses. Each op covers
-`a[a_start:a_end]` and `b[b_start:b_end]`, carries those lines in `a_lines`
-and `b_lines`, and has a `tag` of `"equal"`, `"insert"`, `"delete"` or
-`"replace"`. Indices follow `difflib.SequenceMatcher.get_opcodes()`, and
-`op.as_opcode()` returns the same tuple. `unified_diff` renders the same
-text `difflib.unified_diff` would for that alignment.
 
 Each algorithm is also available directly, with the same return type:
 
@@ -403,7 +483,8 @@ fidelity, marks them as ignored, and reports the effective result in
 `has_changes`.
 
 As with `diff`, the exit status is 0 when the files are identical (or differ
-only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it on the classic patience-diff example:
+only in ways you chose to ignore), 1 when they differ, and 2 on error. Try it
+on the classic patience-diff example (after cloning the repository):
 `histodiff examples/frobnitz_old.c examples/frobnitz_new.c`, then the same
 with `--algorithm myers`.
 
@@ -455,7 +536,7 @@ The adapter follows Git's file-pair behavior:
 `git-histodiff` is an adapter invoked by Git, not another two-file interface.
 Continue to use `histodiff OLD NEW` for direct file comparisons.
 
-## API stability
+### API stability
 
 histodiff is still in its `0.x` series, but the following interfaces are safe
 to build against:
@@ -480,7 +561,7 @@ to build against:
   differences, `1` means differences were found, and `2` means an error
   prevented comparison.
 
-## Choosing an algorithm
+### Choosing an algorithm
 
 | Algorithm | Use it when | Trade-off |
 | --- | --- | --- |
@@ -506,16 +587,19 @@ to build against:
 
 Because patience and histogram prefer distinctive lines over the largest
 possible match, they sometimes report more changed lines than Myers, most often
-when whole blocks are duplicated and shuffled. All three algorithms share a
-final pass that slides ambiguous insertions and deletions to blank-line and
-indentation boundaries, similar to Git's own clean-up heuristics.
+when whole blocks are duplicated and shuffled (see scenario 3 of the
+[real-world corpus](#real-world-corpus) for a concrete case). All three
+algorithms share a final pass that slides ambiguous insertions and deletions
+to blank-line and indentation boundaries, similar to Git's own clean-up
+heuristics.
 
-## Performance
+### Performance
 
 histodiff is pure Python. These numbers come from
-[`benchmarks/bench.py`](benchmarks/bench.py) on an Apple M3 Pro with
-Python 3.14, using 20,000-line files and keeping the best of 3 runs. Each
-cell shows the time, then the number of lines the diff marks as changed:
+[`benchmarks/bench.py`](https://github.com/rmnvg/histodiff/blob/main/benchmarks/bench.py)
+on an Apple M3 Pro with Python 3.14, using 20,000-line files and keeping the
+best of 3 runs. Each cell shows the time, then the number of lines the diff
+marks as changed:
 
 | Scenario | difflib | myers | patience | histogram |
 | --- | --- | --- | --- | --- |
@@ -594,4 +678,4 @@ generated inputs and shrinking failures. CI runs all of the above on Python
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](https://github.com/rmnvg/histodiff/blob/main/LICENSE).
