@@ -120,6 +120,30 @@ def test_matches_never_span_two_insertions() -> None:
     ]
 
 
+def test_candidate_limit_still_terminates_on_many_repeats() -> None:
+    # A block whose first line has far more than _MAX_CANDIDATES unused
+    # copies among the insertions: find_moves must not try every one of
+    # them (that would be quadratic in a file full of a repeated line), so
+    # it settles for a match found within the first _MAX_CANDIDATES tried
+    # rather than reaching a longer match placed after the limit.
+    from histodiff.moves import _MAX_CANDIDATES
+
+    anchor = "duplicate_marker_line_x"
+    tail = "the_only_line_that_continues_the_real_match_here"
+    n = _MAX_CANDIDATES + 5
+    ops = [DiffOp("insert", 0, 0, i, i + 1, (), (anchor,)) for i in range(n)]
+    ops.append(DiffOp("insert", 0, 0, n, n + 2, (), (anchor, tail)))
+    ops.append(DiffOp("delete", 0, 2, n + 2, n + 2, (anchor, tail), ()))
+
+    moves = find_moves(ops, min_alnum=0)
+    # The true 2-line match sits past the search cap, so the deleted block
+    # is matched to short candidates found earlier instead of one long
+    # match - a documented trade-off, not a crash or an unbounded search.
+    assert moves
+    assert all(m.a_end - m.a_start == 1 for m in moves)
+    assert {m.a_start for m in moves} == {0, 1}
+
+
 def test_key_matches_reindented_moves() -> None:
     body = ["def helper(value):", "    return value * 2"]
     indented = ["    " + line for line in body]

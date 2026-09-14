@@ -30,7 +30,14 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["build>=1", "hypothesis>=6", "mypy>=1.10", "pytest>=7", "ruff>=0.5"]
+dev = [
+    "build>=1",
+    "hypothesis>=6",
+    "mypy>=1.10",
+    "pytest>=7",
+    "pytest-cov>=5",
+    "ruff>=0.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/rmnvg/histodiff"
@@ -51,6 +58,22 @@ packages = ["src/histodiff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["histodiff"]
+branch = true
+# __main__.py only ever runs as `python -m histodiff`, in a subprocess
+# coverage.py can't see into (it's exercised by
+# tests/test_cli.py::test_python_dash_m); see the module's own docstring.
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+# Established by measuring actual coverage (99% at the time this was set,
+# after closing every gap that wasn't dead/defensive code - see the pragma
+# comments in src/ for what's excluded and why) and leaving headroom for
+# new code to land before its tests do, not chosen a priori.
+fail_under = 95
 
 [tool.ruff]
 line-length = 88

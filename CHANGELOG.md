@@ -24,6 +24,9 @@ alignment while preserving the public data model and valid edit operations.
   difflib, all three histodiff algorithms, and the third-party
   `patiencediff` package across ten representative scenarios, with changed
   lines, hunks, timing, and peak memory for the larger ones.
+- Branch coverage measurement (`pytest-cov`), enforced in CI at 95%, with
+  the remaining, deliberately untested lines marked `# pragma: no cover`
+  and a comment explaining why each is unreachable or untestable in-process.
 
 [Unreleased]: https://github.com/rmnvg/histodiff/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/rmnvg/histodiff/releases/tag/v0.1.0

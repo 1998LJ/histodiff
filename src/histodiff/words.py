@@ -200,7 +200,12 @@ def inline_word_diff(
     def add(tag: Literal["equal", "delete", "insert"], text: str) -> None:
         if not text:
             return
-        if runs and runs[-1][0] == tag:
+        # Defensive: ops from build_ops always alternate equal/non-equal
+        # with no empty "equal" run (every token, including _SEP, is a
+        # non-empty string), so two consecutive calls here never share a
+        # tag today. Kept in case that invariant, or a future caller of
+        # add(), stops guaranteeing it.
+        if runs and runs[-1][0] == tag:  # pragma: no cover
             runs[-1] = (tag, runs[-1][1] + text)
         else:
             runs.append((tag, text))

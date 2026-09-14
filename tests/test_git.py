@@ -107,6 +107,82 @@ def test_external_diff_reports_unmerged_and_bad_invocations(capsys) -> None:
     assert "git config diff.external git-histodiff" in capsys.readouterr().out
 
 
+def test_version_flag(capsys) -> None:
+    import histodiff
+
+    assert main(["--version"]) == 0
+    assert capsys.readouterr().out == f"git-histodiff {histodiff.__version__}\n"
+
+
+def test_invalid_rename_score_is_rejected(tmp_path: Path, capsys) -> None:
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old.write_bytes(b"same\n")
+    new.write_bytes(b"same\n")
+    args = [
+        "old.py",
+        str(old),
+        _OID,
+        _MODE,
+        str(new),
+        _OID,
+        _MODE,
+        "new.py",
+        "not a similarity score",
+    ]
+    assert main(args) == 2
+    assert "invalid rename/copy score" in capsys.readouterr().err
+
+
+def test_status_2_is_never_hidden_by_trust_env(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    # A histodiff-level error (missing file) must surface as exit 2 even
+    # without GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE, unlike ordinary status 1.
+    monkeypatch.delenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", raising=False)
+    missing = tmp_path / "does-not-exist"
+    present = tmp_path / "present"
+    present.write_bytes(b"content\n")
+
+    assert main(protocol(missing, present)) == 2
+    assert "does-not-exist" in capsys.readouterr().err
+
+
+def test_git_status_never_hides_an_underlying_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # In practice the adapter's own file-reading always runs first, so the
+    # underlying comparison it hands off to never itself returns status 2
+    # today - but _git_status's job is specifically to keep that case safe
+    # regardless, so it's tested directly against the function it protects.
+    import histodiff._git as git_module
+
+    monkeypatch.setattr(git_module, "cli_main", lambda *a, **k: 2)
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old.write_bytes(b"same\n")
+    new.write_bytes(b"same\n")
+
+    monkeypatch.delenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", raising=False)
+    assert main(protocol(old, new)) == 2
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", "true")
+    assert main(protocol(old, new)) == 2
+
+
+def test_unreadable_file_reports_an_error(tmp_path: Path, capsys) -> None:
+    # A directory can't be opened as a file; this exercises the same
+    # OSError-handling path a permission error would take, portably (a
+    # chmod-based permission test would be bypassed when run as root).
+    old = tmp_path / "old_dir"
+    old.mkdir()
+    new = tmp_path / "new"
+    new.write_bytes(b"content\n")
+
+    assert main(protocol(old, new)) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("git-histodiff: ") and str(old) in err
+
+
 def test_documented_git_workflow(tmp_path: Path) -> None:
     git = shutil.which("git")
     adapter = shutil.which("git-histodiff", path=get_path("scripts"))

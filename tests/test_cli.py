@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from histodiff.cli import GREEN, NO_NEWLINE, RED, RESET, main, split_lines
+from histodiff.cli import GREEN, NO_NEWLINE, RED, RESET, main, render, split_lines
 from samples import FROBNITZ_NEW, FROBNITZ_OLD
 
 
@@ -141,3 +141,56 @@ def test_python_dash_m(files) -> None:
     )
     assert result.returncode == 1
     assert "+int fib(int n)" in result.stdout
+
+
+def test_width_must_be_positive(files) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main([*files, "-y", "-W", "0"])
+    assert exc.value.code == 2
+
+    with pytest.raises(SystemExit):
+        main([*files, "--side-by-side", "--width", "-1"])
+
+
+def test_render_survives_a_malformed_hunk_header() -> None:
+    # render() is also called directly with hand-built lines (as the other
+    # test modules do); a header that doesn't match the usual "@@ -a,b +c,d
+    # @@" shape must still be colored and passed through, with the line
+    # counters left wherever they were.
+    lines = [
+        "--- a\n",
+        "+++ b\n",
+        "@@ not a real hunk header @@\n",
+        " context\n",
+    ]
+    out = "".join(render(lines, "color"))
+    assert "not a real hunk header" in out
+    assert " context\n" in out
+
+
+def test_broken_pipe_while_writing_is_handled(
+    files, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    calls = []
+
+    class FakeStdout:
+        def write(self, chunk: str) -> int:
+            raise BrokenPipeError
+
+        def fileno(self) -> int:
+            return 99
+
+        def flush(self) -> None:
+            pass
+
+    monkeypatch.setattr(sys, "stdout", FakeStdout())
+    monkeypatch.setattr(os, "open", lambda *a, **k: calls.append(("open", a, k)) or 3)
+    monkeypatch.setattr(os, "dup2", lambda *a, **k: calls.append(("dup2", a, k)))
+
+    # main() must swallow the BrokenPipeError rather than raise it, and it
+    # still reports the real (non-error) exit status for the comparison.
+    assert main(list(files)) == 1
+    assert ("open", (os.devnull, os.O_WRONLY), {}) in calls
+    assert any(name == "dup2" for name, _, _ in calls)

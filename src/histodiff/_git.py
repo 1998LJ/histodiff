@@ -111,5 +111,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     return _git_status(status)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
+    # The installed `git-histodiff` console script calls main() directly, not
+    # through this guard; tests/test_git.py exercises that real entry point
+    # via a subprocess (test_documented_git_workflow), which coverage.py
+    # can't see into. Running this file directly as a script would take the
+    # same path, so this line stays untested rather than untestable.
     sys.exit(main())

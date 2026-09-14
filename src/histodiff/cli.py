@@ -599,5 +599,9 @@ def main(
     return 1 if changed else 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
+    # `python -m histodiff` goes through __main__.py instead (see its own
+    # pragma comment); this guard only fires for `python path/to/cli.py` or
+    # `python -m histodiff.cli`, neither of which is a documented entry
+    # point, so there's no subprocess test exercising it specifically.
     sys.exit(main())

@@ -19,6 +19,8 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy src
+      - name: Coverage
+        run: pytest --cov --cov-branch --cov-report=term-missing
 
   build:
     runs-on: ubuntu-latest

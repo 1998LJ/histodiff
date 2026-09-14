@@ -71,6 +71,33 @@ Hypothesis examples it has found failing are cached under `.hypothesis/`
 (gitignored). That cache isn't needed to reproduce a bug report - include
 the failing input directly in the report or as a test instead.
 
+## Coverage
+
+```bash
+pytest --cov --cov-branch --cov-report=term-missing
+```
+
+CI runs this too, and fails the build under 95% branch coverage (see
+`fail_under` in `pyproject.toml`); the actual number stays close to 100% -
+run the command above to see exactly which lines or branches a change left
+untested.
+
+Coverage is a way to *find* gaps, not a target to chase to 100% for its own
+sake. When you find one:
+
+- If it's reachable with a real input, add a test for it. A gap the report
+  finds is often exactly the kind of edge case worth a regression test:
+  an error path, an unusual combination of two options, an off-by-one at a
+  boundary.
+- If it genuinely can't be reached - dead code kept as a defensive guard, an
+  entry point (`if __name__ == "__main__":`) that only runs in a subprocess
+  coverage.py can't see into - exclude it explicitly with an inline
+  `# pragma: no cover` (or `# pragma: no branch` for one side of an `if`)
+  **and a comment explaining why**, not a bare pragma. Search the codebase
+  for `pragma: no` for examples of the kind of justification expected. Don't
+  lower `fail_under` to make a gap disappear; either close it or exclude it
+  with a reason.
+
 ## Formatting and type checking
 
 ```bash

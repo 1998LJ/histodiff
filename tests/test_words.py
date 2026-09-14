@@ -123,6 +123,17 @@ def test_huge_blocks_are_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
 
+def test_huge_one_sided_block_falls_back_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A block over MAX_TOKENS with nothing at all on one side: the fallback
+    # in inline_word_diff must still skip the empty side's run entirely
+    # rather than emit an empty ("delete"/"insert", "") tuple.
+    monkeypatch.setattr(histodiff.words, "MAX_TOKENS", 1)
+    assert inline_word_diff([], ["a b c"]) == [("insert", "a b c")]
+    assert inline_word_diff(["a b c"], []) == [("delete", "a b c")]
+
+
 @pytest.mark.parametrize("algorithm", ["myers", "patience", "histogram"])
 def test_every_algorithm_works(algorithm: str) -> None:
     old, new = highlight_words(["a = f(x)"], ["a = g(x)"], algorithm=algorithm)

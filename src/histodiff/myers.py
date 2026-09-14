@@ -125,10 +125,22 @@ def _middle_snake(
                 if 0 <= x <= n and 0 <= y <= m and n + m - x - y > best:
                     best, bx, by = n + m - x - y, x, y
             # A point strictly inside the box makes both halves smaller.
-            if 0 < bx + by < n + m:
+            #
+            # This is always true, not just usually: _middle_snake is only
+            # ever called with n >= 1 and m >= 1 (myers_matches skips empty
+            # boxes), so by the time d >= cost, d >= 1 too, and the forced
+            # pure-deletion move on diagonal k = d already gives vf[d] >=
+            # min(d, n) >= 1 - so best >= 1 - with the symmetric argument
+            # bounding it below n + m from the backward side. The condition
+            # below and the AssertionError after the loop are kept as a
+            # guard against a mistake in that reasoning (or a future change
+            # to it), not because either is reachable today.
+            if 0 < bx + by < n + m:  # pragma: no branch
                 return alo + bx, blo + by, alo + bx, blo + by
 
-    raise AssertionError("unreachable: Myers search found no middle snake")
+    raise AssertionError(  # pragma: no cover
+        "unreachable: Myers search found no middle snake"
+    )
 
 
 def myers_matches(

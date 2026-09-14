@@ -22,6 +22,7 @@ from histodiff import (
 )
 from histodiff.cli import (
     BOLD,
+    CYAN,
     GREEN,
     MAGENTA,
     NO_REVERSE,
@@ -29,6 +30,7 @@ from histodiff.cli import (
     RESET,
     REVERSE,
     main,
+    render_side_by_side,
 )
 from test_cli import write
 from test_readability import python_function
@@ -77,6 +79,27 @@ def test_side_by_side_truncates_and_expands_tabs() -> None:
     assert lines[1] == "        x | " + "        y"
 
 
+def test_side_by_side_color_drops_a_segment_with_no_room_left() -> None:
+    # A highlighted word right at the column boundary: once the unchanged
+    # prefix exactly fills the column, the following (changed) segment has
+    # zero budget left and must be dropped entirely, not shown as an empty
+    # highlighted span.
+    old = ["abc def"]
+    new = ["abc xyz"]
+    out = "".join(render_side_by_side(diff(old, new), width=11, color=True))
+    assert out == f"{RED}abc {RESET} | {GREEN}abc {RESET}\n"
+    assert REVERSE not in out
+
+
+def test_side_by_side_truncation_treats_combining_marks_as_zero_width() -> None:
+    # "café" as "cafe" + a combining acute accent (U+0301): the accent takes
+    # no column of its own, so truncating right after it must not count it
+    # towards, or stop it from filling, the width budget.
+    combining = "café"
+    lines = list(side_by_side(diff([combining], [combining]), width=13, lineterm=""))
+    assert lines == [combining + "    " + combining]
+
+
 def test_side_by_side_uses_terminal_width_for_unicode() -> None:
     lines = list(side_by_side(diff(["界ab"], ["界ab"]), width=13, lineterm=""))
     assert lines == ["界ab" + " " * 4 + "界ab"]
@@ -99,6 +122,18 @@ def test_side_by_side_requires_text() -> None:
         list(side_by_side(diff([1], [2])))
     with pytest.raises(ValueError, match="width"):
         list(side_by_side(diff(["a"], ["b"]), width=0))
+    with pytest.raises(ValueError, match="context"):
+        list(side_by_side(diff(["a"], ["b"]), context=-1))
+
+
+def test_side_by_side_preserves_crlf_and_missing_final_newline() -> None:
+    old = ["one\r\n", "two\r\n", "three"]
+    new = ["one\r\n", "2\r\n", "three"]
+    lines = list(side_by_side(diff(old, new), width=21, lineterm=""))
+    # \r\n (and a missing final newline) are stripped before column layout,
+    # like a plain "\n" - never shown raw in the middle of a padded column.
+    assert lines == ["one         one", "two       | 2", "three       three"]
+    assert all("\r" not in line for line in lines)
 
 
 def test_cli_side_by_side(tmp_path, capsys) -> None:
@@ -132,6 +167,70 @@ def test_cli_side_by_side_color(tmp_path, capsys) -> None:
         + " " * 15
         + f" | {GREEN}result = {REVERSE}process_v2{NO_REVERSE}(event){RESET}\n"
     )
+
+
+def test_side_by_side_move_inside_a_replace_disables_its_highlighting() -> None:
+    # When the moved block ends up merged into a "replace" op (because the
+    # reinserted line sits right next to other new content, with nothing
+    # equal separating them), word highlighting for that whole op is
+    # skipped - moved and highlighted are mutually exclusive per op.
+    long_line = "important_configuration_value_x = compute_it(alpha, beta)"
+    old = [long_line, "short_a", "short_b"]
+    new = [
+        "short_a",
+        "totally different long replacement text goes here",
+        "and one more brand new line",
+        long_line,
+    ]
+    ops = diff(old, new)
+    moves = find_moves(ops)
+    assert moves
+    assert any(op.tag == "replace" and op.b_end == moves[0].b_end for op in ops)
+
+    out = "".join(render_side_by_side(ops, width=100, color=True, moves=moves))
+    assert f"{BOLD}{MAGENTA}{long_line[:47]}" in out
+    assert f"{BOLD}{CYAN}{long_line[:47]}" in out
+    # The replace's own content is plain red/green, not reverse-highlighted,
+    # because highlighting was skipped for the whole (moved) op.
+    assert f"{RED}short_b{RESET}" in out
+    assert REVERSE not in out
+
+
+def test_side_by_side_highlights_unequal_replace_next_to_a_move() -> None:
+    # A *different* replace op - unequal-sized, and not touching the move -
+    # in the same diff: highlighting is computed for it, exercising both
+    # the pure-insert ("no old counterpart") and pure-delete row shapes
+    # together with a moved block elsewhere in the same call.
+    long_line = "important_configuration_value_x = compute_it(alpha, beta)"
+    old = [long_line, "short_a", "value = compute(x, y)", "short_c"]
+    new = [
+        "short_a",
+        "value = compute(x, y, z)",
+        "extra_line_here",
+        "short_c",
+        long_line,
+    ]
+    ops = diff(old, new)
+    moves = find_moves(ops)
+    assert moves
+
+    out = "".join(render_side_by_side(ops, width=100, color=True, moves=moves))
+    assert REVERSE in out  # "x, y)" -> "x, y, z)" was highlighted
+    assert f"{GREEN}{REVERSE}extra_line_here{NO_REVERSE}{RESET}" in out
+
+
+def test_side_by_side_highlights_replace_where_old_side_is_longer() -> None:
+    # The mirror image: more old lines than new, so a row has no new-side
+    # counterpart instead - the same shape as the HTML equivalent above.
+    long_line = "important_configuration_value_x = compute_it(alpha, beta)"
+    old = [long_line, "short_a", "value = compute(x, y)", "extra old line", "short_c"]
+    new = ["short_a", "value = compute(x, y, z)", "short_c", long_line]
+    ops = diff(old, new)
+    moves = find_moves(ops)
+    assert moves
+
+    out = "".join(render_side_by_side(ops, width=100, color=True, moves=moves))
+    assert f"{RED}{REVERSE}extra old line{NO_REVERSE}{RESET}" in out
 
 
 def test_cli_side_by_side_moves(tmp_path, capsys) -> None:
@@ -285,6 +384,54 @@ def test_html_rejects_bad_input() -> None:
         html_diff(diff(["a"], ["b"]), context=-1)
 
 
+def test_html_explicit_title_skips_the_default() -> None:
+    page = html_diff(
+        diff(["a"], ["b"]), fromfile="old.py", tofile="new.py", title="Custom title"
+    )
+    assert "<title>Custom title</title>" in page
+    assert "old.py → new.py" not in page.split("</title>")[0]
+
+
+def test_html_highlights_unequal_replace_around_a_move() -> None:
+    # A replace where one side has an extra line, in the same diff as (but
+    # not overlapping) a moved block, exercises both the "row has no
+    # a_index" case and word highlighting together in one page.
+    long_line = "important_configuration_value = compute_it(alpha, beta)"
+    old = [long_line, "short_a", "value = compute(x, y)", "short_c"]
+    new = [
+        "short_a",
+        "value = compute(x, y, z)",
+        "extra_line_here",
+        "short_c",
+        long_line,
+    ]
+    ops = diff(old, new)
+    moves = find_moves(ops)
+    assert moves, "the long line should have been detected as moved"
+    page = html_diff(ops, moves=moves)
+    assert '<td class="line old moved">' in page
+    # The insert-only row (new has more lines than old) has an empty old cell.
+    assert '<td class="num"></td><td class="line empty"></td>' in page
+    assert "<ins>" in page  # "x, y)" -> "x, y, z)": word-level highlighting fired
+    assert_balanced(page)
+
+
+def test_html_highlights_replace_where_old_side_is_longer() -> None:
+    # The mirror image of the above: more old lines than new, so a row
+    # exists with no *new*-side counterpart instead.
+    long_line = "important_configuration_value_x = compute_it(alpha, beta)"
+    old = [long_line, "short_a", "value = compute(x, y)", "extra old line", "short_c"]
+    new = ["short_a", "value = compute(x, y, z)", "short_c", long_line]
+    ops = diff(old, new)
+    moves = find_moves(ops)
+    assert moves
+    page = html_diff(ops, moves=moves)
+    assert '<td class="line old moved">' in page
+    assert '<td class="line empty"></td></tr>' in page
+    assert "<del>" in page
+    assert_balanced(page)
+
+
 def test_cli_html(tmp_path, capsys) -> None:
     old = write(tmp_path / "old", ["a", "b"])
     new = write(tmp_path / "new", ["a", "c"])
@@ -389,6 +536,11 @@ def test_json_moves() -> None:
 
 def test_json_keeps_unicode_readable() -> None:
     assert "café" in to_json(diff(["café"], ["cafe"]))
+
+
+def test_to_json_rejects_negative_context() -> None:
+    with pytest.raises(ValueError, match="context"):
+        to_json(diff(["a"], ["b"]), ignore_blank_lines=True, context=-1)
 
 
 def test_from_json_rejects_other_documents() -> None:
@@ -514,6 +666,69 @@ def test_from_json_rejects_other_documents() -> None:
             ],
         },
         {"version": 1, "old": {"length": 1}, "new": {"length": 0}, "ops": []},
+        # 'ignored' present but not a bool.
+        {
+            "version": 1,
+            "old": {"length": 1},
+            "new": {"length": 1},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 0,
+                    "a_end": 1,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": ["x"],
+                    "b_lines": ["x"],
+                    "ignored": "yes",
+                }
+            ],
+        },
+        # a_lines is a string, not a list of lines.
+        {
+            "version": 1,
+            "old": {"length": 1},
+            "new": {"length": 1},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 0,
+                    "a_end": 1,
+                    "b_start": 0,
+                    "b_end": 1,
+                    "a_lines": "x",
+                    "b_lines": ["x"],
+                }
+            ],
+        },
+        # a_end before a_start: a reversed range, but *after* an op that
+        # legitimately continues at a_start=3 - so this hits the reversed-
+        # range check itself rather than the "does not continue" one.
+        {
+            "version": 1,
+            "old": {"length": 3},
+            "new": {"length": 3},
+            "ops": [
+                {
+                    "tag": "equal",
+                    "a_start": 0,
+                    "a_end": 3,
+                    "b_start": 0,
+                    "b_end": 3,
+                    "a_lines": ["x", "y", "z"],
+                    "b_lines": ["x", "y", "z"],
+                },
+                {
+                    "tag": "delete",
+                    "a_start": 3,
+                    "a_end": 1,
+                    "b_start": 3,
+                    "b_end": 3,
+                    "a_lines": [],
+                    "b_lines": [],
+                },
+            ],
+        },
     ],
 )
 def test_from_json_rejects_malformed_operations(document) -> None:
@@ -530,6 +745,79 @@ def test_from_json_rejects_malformed_moves() -> None:
     document["moves"] = [{"a_start": 0, "a_end": 2, "b_start": 0, "b_end": 2}]
     with pytest.raises(ValueError, match="outside"):
         from_json(json.dumps(document))
+
+
+def _document_with_two_moves(move_a: dict, move_b: dict | None = None) -> dict:
+    # A 6-line file on each side gives enough room for two non-overlapping
+    # moves, or for the overlap test to actually overlap.
+    ops = diff([f"line{i}" for i in range(6)], [f"line{i}" for i in range(6)])
+    document = json.loads(to_json(ops))
+    document["moves"] = [move_a] if move_b is None else [move_a, move_b]
+    return document
+
+
+@pytest.mark.parametrize(
+    ("move", "match"),
+    [
+        ("not a dict", "must be an object"),
+        ({"a_start": 0, "a_end": 0, "b_start": 0, "b_end": 0}, "invalid ranges"),
+        ({"a_start": 2, "a_end": 1, "b_start": 0, "b_end": 1}, "invalid ranges"),
+        ({"a_start": 0, "a_end": 1, "b_start": 0, "b_end": 2}, "invalid ranges"),
+        (
+            {"a_start": 0, "a_end": 1, "b_start": 0, "b_end": 1, "a_lines": ["x"]},
+            "incomplete line data",
+        ),
+        (
+            {
+                "a_start": 0,
+                "a_end": 1,
+                "b_start": 0,
+                "b_end": 1,
+                "a_lines": "x",
+                "b_lines": ["x"],
+            },
+            "lines must be lists",
+        ),
+        (
+            {
+                "a_start": 0,
+                "a_end": 2,
+                "b_start": 0,
+                "b_end": 2,
+                "a_lines": ["x"],
+                "b_lines": ["x", "y"],
+            },
+            "range and line counts differ",
+        ),
+    ],
+)
+def test_from_json_rejects_malformed_single_move(move, match) -> None:
+    document = _document_with_two_moves(move)
+    with pytest.raises(ValueError, match=match):
+        from_json(json.dumps(document))
+
+
+def test_from_json_rejects_overlapping_moves() -> None:
+    document = _document_with_two_moves(
+        {"a_start": 0, "a_end": 2, "b_start": 0, "b_end": 2},
+        {"a_start": 1, "a_end": 3, "b_start": 3, "b_end": 5},
+    )
+    with pytest.raises(ValueError, match="overlaps another move"):
+        from_json(json.dumps(document))
+
+
+def test_from_json_accepts_moves_without_lines() -> None:
+    # Moves are allowed to omit their lines independently of the ops (which
+    # from_json requires lines for); it must not try to line-count-check
+    # what isn't there.
+    long_line = "important = compute_something(alpha, beta)"
+    ops = diff([long_line, "keep = 1"], ["keep = 1", long_line])
+    moves = find_moves(ops)
+    assert moves
+    document = json.loads(to_json(ops, moves=moves))  # ops keep their lines
+    for move in document["moves"]:
+        del move["a_lines"], move["b_lines"]
+    assert from_json(json.dumps(document)) == ops
 
 
 def test_json_marks_blank_only_hunks_as_ignored(tmp_path, capsys) -> None:
