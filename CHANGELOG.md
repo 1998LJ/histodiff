@@ -8,6 +8,18 @@ alignment while preserving the public data model and valid edit operations.
 
 ## [Unreleased]
 
+### Added
+
+- `-i` / `--ignore-case` for Unicode case-insensitive CLI comparisons,
+  compatible with whitespace filtering and moved-block detection.
+
+### Fixed
+
+- Git adapter treats filenames beginning with `-`, including a literal `-`,
+  as files instead of CLI options or standard input.
+- Git adapter reports metadata-only changes (renames, mode changes, and empty
+  file additions/deletions) when Git trusts the helper's exit status.
+
 ## [0.1.0] - 2026-09-14
 
 ### Added
