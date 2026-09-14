@@ -67,6 +67,8 @@ jobs:
         run: python examples/before_after.py
       - name: Benchmark smoke test
         run: python benchmarks/bench.py --quick
+      - name: Real-world corpus example
+        run: python examples/real_world_corpus.py --quick
       - name: CLI smoke test
         shell: bash
         run: |

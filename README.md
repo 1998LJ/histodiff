@@ -75,6 +75,68 @@ single changed row in a repetitive CSV file (difflib: 301 changed lines,
 histodiff: 1), and a small config file where both report the same number of
 changes but difflib's change block begins in the middle of a section.
 
+## Real-world corpus
+
+[`examples/real_world_corpus.py`](examples/real_world_corpus.py) runs ten
+more scenarios - a moved function, a moved-and-edited function, a reordered
+import block, a moved Markdown section, a value changed in a large repetitive
+YAML file, a row inserted into a large CSV, code wrapped in a new
+conditional, a generated-looking record with one changed field, two unrelated
+files, and a plain one-line change - through `difflib`, all three histodiff
+algorithms, and (if you `pip install patiencediff`) the third-party
+`patiencediff` package. Every fixture is hand-written for the script, not
+pulled from a real repository, so there's no external license or attribution
+to track; see the script's docstring for that trade-off. Changed-line counts,
+best of 5 runs:
+
+| # | Scenario (lines) | difflib | histogram | patience | myers |
+| -: | --- | -: | -: | -: | -: |
+| 1 | Function moved, unchanged (220) | 360 | 20 | 20 | 20 |
+| 2 | Function moved and edited (222) | 342 | 22 | 22 | 22 |
+| 3 | Import block reshuffled and regrouped (17) | 23 | 25 | 21 | 21 |
+| 4 | Markdown section moved (32) | 16 | 16 | 16 | 16 |
+| 5 | One field changed in repetitive YAML (1,801) | 2 | 2 | 2 | 2 |
+| 6 | One row inserted among 4,000 identical CSV rows | 4001 | 1 | 1 | 1 |
+| 7 | Code wrapped in a new conditional (8) | 10 | 10 | 10 | 10 |
+| 8 | One field changed in a generated record (25) | 2 | 2 | 2 | 2 |
+| 9 | Two unrelated files (~2,400 lines each) | 4802 | 4030 | 4030 | 4026 |
+| 10 | One unambiguous line changed (7) | 2 | 2 | 2 | 2 |
+
+No tool wins every row, on purpose - half of these scenarios are here
+specifically because every tool ties:
+
+- **Where histodiff wins clearly (1, 2, 6):** once a file is large and
+  repetitive enough - 200+ lines for difflib's autojunk heuristic to kick in,
+  as in scenario 1, or rows with no unique content left at all, as in
+  scenario 6 - difflib's greedy longest-match search can go badly wrong while
+  every histodiff algorithm still finds the true, minimal change.
+- **Where they all tie (4, 5, 7, 8, 10):** a single unambiguous change, even
+  in a repetitive-*looking* file, is often not actually ambiguous - each
+  block in scenario 5's YAML still has a genuinely unique name and port right
+  next to the repeated fields, and that's enough for difflib too. Scenario 8
+  shows where the real remaining value is on a tie: word-level highlighting
+  inside the one line that changed.
+- **Where histogram is not the best histodiff algorithm (3):** reshuffling
+  and regrouping an entire block, like an isort pass, is a hard case for
+  line-based diffing in general; here patience and myers tie at the true
+  minimum and histogram's rarest-line-first rule picks a slightly worse
+  anchor. None of the five tools makes this particular change look clean.
+- **Where difflib is faster, not just competitive (9):** on two files with
+  almost nothing in common, difflib and patiencediff both give up fast
+  (under a millisecond) and report nearly the whole file changed; histodiff's
+  algorithms take about 200 ms longer here to find a little genuine overlap
+  and report roughly 16% fewer changed lines for it. Which trade-off you want
+  depends on whether you'd rather wait or read a slightly smaller diff for
+  files this unrelated - see [Performance](#performance) for how the wait
+  scales and how `minimal=True` affects it.
+- **patiencediff**, the independent third-party implementation of the same
+  patience idea, tracks histodiff's `patience`/`myers` results on every
+  scenario except 9, where it instead tracks difflib - a sign that its
+  fallback for "no useful anchors at all" differs from histodiff's own.
+
+Hunk counts, timings and (for the four larger scenarios) peak memory are in
+the script's own output, not reproduced here.
+
 ## Installation
 
 ```bash

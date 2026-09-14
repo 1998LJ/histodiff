@@ -20,6 +20,10 @@ alignment while preserving the public data model and valid edit operations.
 - A `difflib.SequenceMatcher`-compatible API and support for generic sequences.
 - A dependency-free command-line interface.
 - A `git-histodiff` adapter for repository, staged, and commit diffs.
+- A runnable real-world corpus (`examples/real_world_corpus.py`) comparing
+  difflib, all three histodiff algorithms, and the third-party
+  `patiencediff` package across ten representative scenarios, with changed
+  lines, hunks, timing, and peak memory for the larger ones.
 
 [Unreleased]: https://github.com/rmnvg/histodiff/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/rmnvg/histodiff/releases/tag/v0.1.0
