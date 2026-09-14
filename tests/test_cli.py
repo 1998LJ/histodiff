@@ -194,3 +194,48 @@ def test_broken_pipe_while_writing_is_handled(
     assert main(list(files)) == 1
     assert ("open", (os.devnull, os.O_WRONLY), {}) in calls
     assert any(name == "dup2" for name, _, _ in calls)
+
+
+@pytest.mark.parametrize("algorithm", ["myers", "patience", "histogram"])
+@pytest.mark.parametrize("flag", ["-i", "--ignore-case"])
+def test_ignore_case_unicode(tmp_path, capsys, algorithm, flag) -> None:
+    a = write(tmp_path / "a", ["Straße", "Σ"])
+    b = write(tmp_path / "b", ["STRASSE", "ς"])
+    assert main([a, b, flag, "--algorithm", algorithm]) == 0
+    assert capsys.readouterr().out == ""
+    assert main([a, b]) == 1
+
+
+@pytest.mark.parametrize("flags", [["-b"], ["-w"], ["-b", "-w"]])
+def test_ignore_case_composes_with_whitespace(tmp_path, capsys, flags) -> None:
+    a = write(tmp_path / "a", ["Hello   WORLD  "])
+    b = write(tmp_path / "b", ["hello world"])
+    assert main([a, b, "-i", *flags]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_ignore_case_json_preserves_original_lines_and_matches_moves(
+    tmp_path, capsys
+) -> None:
+    import json
+
+    moved = "A sufficiently long moved line"
+    kept = [f"kept line {i}" for i in range(5)]
+    a = write(tmp_path / "a", [moved, *kept])
+    b = write(tmp_path / "b", [*kept, moved.upper()])
+    assert main([a, b, "-i", "-B", "--json"]) == 1
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["has_changes"] is True
+    assert len(doc["moves"]) == 1
+    assert doc["moves"][0]["a_lines"] == [moved + "\n"]
+    assert doc["moves"][0]["b_lines"] == [moved.upper() + "\n"]
+
+
+@pytest.mark.parametrize("flags", [[], ["-y"], ["--html"], ["--json"], ["--color"]])
+def test_ignore_case_keeps_real_changes(tmp_path, capsys, flags) -> None:
+    a = write(tmp_path / "a", ["UNCHANGED", "before"])
+    b = write(tmp_path / "b", ["unchanged", "after"])
+    assert main([a, b, "-i", *flags]) == 1
+    output = capsys.readouterr().out
+    assert "before" in output
+    assert "after" in output

@@ -451,12 +451,18 @@ histodiff old.py new.py -y -W 160                 # side by side, 160 columns wi
 histodiff old.py new.py --html > diff.html        # standalone HTML page
 histodiff old.py new.py --json | jq '.moves'      # machine-readable ops and moves
 histodiff old.py new.py -U 10                     # 10 lines of context
+histodiff old.py new.py -i                        # ignore case differences
 histodiff old.py new.py -b                        # ignore changes in amount of whitespace
 histodiff old.py new.py -w                        # ignore all whitespace
 histodiff old.py new.py -B                        # ignore changes that are only blank lines
 histodiff old.py new.py --minimal                 # smallest diff, however long it takes
 cat new.py | histodiff old.py -                   # '-' reads stdin
 ```
+
+`-i` / `--ignore-case` compares lines using Unicode case folding, so `Straße`
+and `STRASSE` compare equal. Combine it with `-b` or `-w` to ignore whitespace
+differences too. Output retains the original text, and moved-block detection
+uses the same comparison rules. In Python, use `diff(old, new, key=str.casefold)`.
 
 With `--color`, when lines are replaced the words that actually changed are
 shown in reverse video, so `result = process(event)` →

@@ -250,3 +250,34 @@ def test_documented_git_workflow(tmp_path: Path) -> None:
     committed = run("show", "--ext-diff", "--format=", "HEAD")
     assert committed.returncode == 0
     assert "diff --histodiff a/sample.py b/sample.py" in committed.stdout
+
+
+def test_external_diff_accepts_option_like_and_stdin_like_paths(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    Path("--version").write_bytes(b"before\n")
+    Path("-").write_bytes(b"after\n")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", "true")
+
+    assert main(protocol(Path("--version"), Path("-"))) == 1
+    assert "-before\n+after\n" in capsys.readouterr().out
+
+
+def test_trusted_status_includes_metadata_only_changes(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    old = tmp_path / "old"
+    new = tmp_path / "new"
+    old.write_bytes(b"")
+    new.write_bytes(b"")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", "true")
+    unchanged = protocol(old, new)
+    assert main(unchanged) == 0
+    mode_change = unchanged.copy()
+    mode_change[6] = "100755"
+    assert main(mode_change) == 1
+    assert main([*unchanged, "renamed.py", "similarity index 100%"]) == 1
+    assert main(["new", "/dev/null", ".", ".", str(new), _OID, _MODE]) == 1
+    assert main(["old", str(old), _OID, _MODE, "/dev/null", ".", "."]) == 1
+    capsys.readouterr()
