@@ -79,8 +79,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     old_missing = _missing(old_file, old_mode)
     new_missing = _missing(new_file, new_mode)
-    old_input = os.devnull if old_missing else old_file
-    new_input = os.devnull if new_missing else new_file
+    # Git supplies literal paths, including files named '-' or '--version'.
+    # Absolute paths keep the CLI from interpreting them as stdin or options.
+    old_input = os.devnull if old_missing else os.path.abspath(old_file)
+    new_input = os.devnull if new_missing else os.path.abspath(new_file)
     old_label = "/dev/null" if old_missing else f"a/{path}"
     new_label = "/dev/null" if new_missing else f"b/{new_path}"
 
@@ -108,6 +110,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _git_status(1)
 
     status = cli_main([old_input, new_input], _labels=(old_label, new_label))
+    if status == 0 and (
+        old_missing != new_missing or old_mode != new_mode or path != new_path
+    ):
+        status = 1
     return _git_status(status)
 
 

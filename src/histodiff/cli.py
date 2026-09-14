@@ -77,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="always find the smallest diff, even if that is very slow on large, "
         "very different files",
     )
+    parser.add_argument(
+        "-i",
+        "--ignore-case",
+        action="store_true",
+        help="ignore case differences using Unicode case folding",
+    )
     whitespace = parser.add_argument_group("whitespace")
     whitespace.add_argument(
         "-b",
@@ -516,6 +522,12 @@ def main(
         key = ignore_all_space
     elif args.ignore_space_change:
         key = ignore_space_change
+    if args.ignore_case:
+        whitespace_key = key
+
+        def key(line: str) -> str:
+            normalized = whitespace_key(line) if whitespace_key else line
+            return normalized.casefold()
 
     ops = diff(a, b, algorithm=args.algorithm, minimal=args.minimal, key=key)
     del a, b

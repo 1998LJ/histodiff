@@ -13,9 +13,11 @@ Tracked as individual issues, several tagged
 [`good first issue`](https://github.com/rmnvg/histodiff/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22):
 
 - `NO_COLOR` support ([#1](https://github.com/rmnvg/histodiff/issues/1))
-- Case-insensitive comparison, `-i`/`--ignore-case`
-  ([#2](https://github.com/rmnvg/histodiff/issues/2))
 - A `--stat` summary mode ([#3](https://github.com/rmnvg/histodiff/issues/3))
+
+Case-insensitive comparison (`-i` / `--ignore-case`,
+[#2](https://github.com/rmnvg/histodiff/issues/2)) is implemented for the next
+release, including composition with whitespace filtering.
 
 ## Next: driven by real examples
 
