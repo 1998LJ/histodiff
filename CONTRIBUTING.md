@@ -171,6 +171,34 @@ any of these scenarios, the assertion fails and the script explains why.
    style, but a short, descriptive commit message or PR title helps anyone
    reading `git log` later.
 
+## Releasing
+
+Maintainers only. `scripts/verify_dist.py` and `scripts/smoke_test_install.sh`
+back both CI and the release workflows, so a green `build` job in CI on
+`main` means a release is ready to go out:
+
+1. Update `src/histodiff/__init__.py`'s `__version__` and add a dated
+   section to `CHANGELOG.md`.
+2. Optionally, run the **Publish to TestPyPI** workflow
+   (`workflow_dispatch`, from the Actions tab) against that commit first,
+   and check the result on <https://test.pypi.org/project/histodiff/>.
+3. Tag the release and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   This triggers **Release** (`.github/workflows/release.yml`), which
+   rebuilds and re-verifies the artifacts from scratch (it does not reuse
+   anything from step 2), publishes them to PyPI, and creates a GitHub
+   Release with the wheel and sdist attached.
+
+Both release workflows publish through
+[PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) (OIDC,
+no long-lived API tokens) and attach a
+[build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+to the artifacts. The `pypi`/`testpypi` GitHub Environments they run under
+should have a required reviewer configured (Settings > Environments), so
+publishing always needs a second person's approval even though the tag push
+or workflow trigger itself is a single action; PyPI's own trusted-publisher
+configuration for each environment needs setting up once, per the comments
+in the workflow files.
+
 ## Reporting bugs, requesting features, and security issues
 
 - **Bugs and feature requests:** open a

@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Keep pinned GitHub Actions SHAs (see the workflow files' `# vX.Y.Z`
+  # comments) up to date. Dependabot opens a PR bumping both the SHA and its
+  # comment together whenever an action publishes a new tagged release.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

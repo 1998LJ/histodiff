@@ -4,15 +4,20 @@ on:
   push:
   pull_request:
 
+# Default for every job below; jobs that need more (none do here - the
+# release workflows are separate) declare it themselves rather than
+# widening this.
 permissions:
   contents: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
@@ -23,28 +28,18 @@ jobs:
         run: pytest --cov --cov-branch --cov-report=term-missing
 
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: python -m pip install build
-      - run: python -m build
-      - run: python -m pip install dist/*.whl
-      - name: Test installed wheel outside the source tree
-        run: |
-          cd "${RUNNER_TEMP}"
-          python -c "import importlib.metadata as m; import histodiff; assert histodiff.__version__ == m.version('histodiff')"
-          histodiff --version
-      - name: Verify release tag matches package version
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: python -c "import os, histodiff; assert os.environ['RELEASE_TAG'] == f'v{histodiff.__version__}'"
+    # Delegates to the reusable workflow that also backs the release
+    # workflows (release-testpypi.yml, release.yml), so CI builds and
+    # verifies exactly the same artifact a release would publish - not a
+    # separate copy of similar-looking steps that could drift out of sync.
+    uses: ./.github/workflows/build-and-verify.yml
+    permissions:
+      contents: read
 
   test:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -56,8 +51,8 @@ jobs:
           - os: windows-latest
             python-version: "3.13"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
@@ -79,3 +74,26 @@ jobs:
           status=$?
           set -e
           test "$status" -eq 1
+      - name: Git integration smoke test
+        shell: bash
+        # tests/test_git.py already covers this in depth (including via a
+        # real `git` subprocess); this is a short, independent check of the
+        # documented `git diff` workflow specifically, visible as its own
+        # step rather than folded into the general test run above.
+        run: |
+          set -e
+          tmp="${RUNNER_TEMP}/git-smoke"
+          rm -rf "$tmp" && mkdir -p "$tmp" && cd "$tmp"
+          git init -q
+          git config user.name "CI"
+          git config user.email "ci@example.invalid"
+          git config diff.external git-histodiff
+          printf 'one\ntwo\nthree\n' > sample.py
+          git add sample.py
+          git commit -qm "initial"
+          printf 'one\nTWO\nthree\n' > sample.py
+          output="$(git diff -- sample.py)"
+          echo "$output"
+          echo "$output" | grep -q "diff --histodiff a/sample.py b/sample.py"
+          echo "$output" | grep -q -- "-two"
+          echo "$output" | grep -q -- "+TWO"
