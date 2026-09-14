@@ -175,7 +175,10 @@ any of these scenarios, the assertion fails and the script explains why.
 
 Maintainers only. `scripts/verify_dist.py` and `scripts/smoke_test_install.sh`
 back both CI and the release workflows, so a green `build` job in CI on
-`main` means a release is ready to go out:
+`main` means a release is ready to go out. PyPI files are effectively
+immutable - a version, once uploaded, can never be replaced (deleting it
+still leaves that version number permanently unusable) - so a broken release
+is fixed by publishing the next version, not by re-uploading:
 
 1. Update `src/histodiff/__init__.py`'s `__version__` and add a dated
    section to `CHANGELOG.md`.
@@ -183,21 +186,26 @@ back both CI and the release workflows, so a green `build` job in CI on
    (`workflow_dispatch`, from the Actions tab) against that commit first,
    and check the result on <https://test.pypi.org/project/histodiff/>.
 3. Tag the release and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-   This triggers **Release** (`.github/workflows/release.yml`), which
-   rebuilds and re-verifies the artifacts from scratch (it does not reuse
-   anything from step 2), publishes them to PyPI, and creates a GitHub
-   Release with the wheel and sdist attached.
+   This triggers **Release** (`.github/workflows/release.yml`), which runs
+   the full test suite, rebuilds and re-verifies the artifacts from scratch
+   (it does not reuse anything from step 2), publishes them to PyPI, and
+   creates a GitHub Release with the wheel and sdist attached.
 
-Both release workflows publish through
+Both release workflows require the full test suite (`test-suite.yml`) and
+the build/artifact checks (`build-and-verify.yml`) to pass before their
+`publish` job even starts, publish through
 [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) (OIDC,
-no long-lived API tokens) and attach a
+no long-lived API tokens ever stored in the repo), and attach a
 [build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
-to the artifacts. The `pypi`/`testpypi` GitHub Environments they run under
-should have a required reviewer configured (Settings > Environments), so
-publishing always needs a second person's approval even though the tag push
-or workflow trigger itself is a single action; PyPI's own trusted-publisher
-configuration for each environment needs setting up once, per the comments
-in the workflow files.
+to the artifacts. The `pypi` and `testpypi` GitHub Environments they publish
+under each require a reviewer's approval before that job runs - configured
+under Settings > Environments, currently set to require approval from
+@rmnvg - so a tag push or a manual trigger alone is never enough by itself;
+someone has to explicitly approve the run in the Actions UI. PyPI's own
+trusted-publisher configuration for each environment (pointing at this
+repository, the relevant workflow file, and the matching environment name)
+still needs setting up once per index, from the PyPI/TestPyPI website - see
+the comments above each publish step.
 
 ## Reporting bugs, requesting features, and security issues
 

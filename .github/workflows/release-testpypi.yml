@@ -17,14 +17,19 @@ jobs:
     permissions:
       contents: read
 
+  test:
+    uses: ./.github/workflows/test-suite.yml
+    permissions:
+      contents: read
+
   publish:
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-latest
-    # Configure this environment's protection rules (Settings > Environments
-    # > testpypi) to require a reviewer before this job runs, so a manual
-    # trigger still gets a second pair of eyes before anything is uploaded.
-    # It's also where TestPyPI's trusted-publisher configuration expects
-    # this job to run *as* - see the comment on the publish step below.
+    # This environment (Settings > Environments > testpypi) is configured
+    # with a required reviewer, so a manual trigger still gets a second pair
+    # of eyes before anything is uploaded. It's also where TestPyPI's
+    # trusted-publisher configuration expects this job to run *as* - see the
+    # comment on the publish step below.
     environment:
       name: testpypi
       url: https://test.pypi.org/project/histodiff/
