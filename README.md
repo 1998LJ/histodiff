@@ -646,35 +646,15 @@ output mode.
 
 ## Contributing
 
-Issues and pull requests are welcome. To set up a development environment:
-
-```bash
-git clone https://github.com/rmnvg/histodiff
-cd histodiff
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-Before opening a pull request, make sure the tests and linter pass:
-
-```bash
-pytest                          # unit, readability and CLI tests
-ruff check .                    # lint
-ruff format --check .           # formatting
-mypy src                        # public and internal types
-python -m build                 # wheel and source distribution
-python examples/before_after.py # the README comparison still holds
-```
-
-If you touch the algorithms, run `python benchmarks/bench.py` before and
-after your change and include both tables in the pull request.
-
-New behavior should come with tests. For changes to how lines get matched,
-add a realistic case to `tests/test_readability.py` showing the diff you
-expect, plus a property in `tests/test_properties.py` when the behavior has
-a general invariant. Hypothesis complements the fixed regressions by exploring
-generated inputs and shrinking failures. CI runs all of the above on Python
-3.9–3.14.
+Issues and pull requests are welcome. See
+[CONTRIBUTING.md](https://github.com/rmnvg/histodiff/blob/main/CONTRIBUTING.md)
+for environment setup, what's expected of tests, formatting, type checking,
+property tests and benchmarks, and the pull-request process. Participation
+is governed by the
+[Code of Conduct](https://github.com/rmnvg/histodiff/blob/main/CODE_OF_CONDUCT.md).
+Found a security vulnerability? Please report it privately - see
+[SECURITY.md](https://github.com/rmnvg/histodiff/blob/main/SECURITY.md)
+rather than opening a public issue.
 
 ## License
 

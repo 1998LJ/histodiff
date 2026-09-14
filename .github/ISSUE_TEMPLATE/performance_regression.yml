@@ -1,0 +1,57 @@
+name: Performance regression
+description: histodiff got slower or used more memory than before, or is slower than expected for a given input.
+title: "[Performance]: "
+labels: ["performance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        See [benchmarks/bench.py](https://github.com/rmnvg/histodiff/blob/main/benchmarks/bench.py)
+        and [examples/real_world_corpus.py](https://github.com/rmnvg/histodiff/blob/main/examples/real_world_corpus.py)
+        for the kind of input and measurement that's easiest to act on.
+  - type: input
+    id: version-before
+    attributes:
+      label: Version (or commit) where it was fast
+      placeholder: "0.1.0, or a commit hash"
+  - type: input
+    id: version-after
+    attributes:
+      label: Version (or commit) where it is slow
+      placeholder: "0.2.0, or a commit hash"
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Input that triggers it
+      description: >
+        Size and shape of the input (line count, how repetitive or similar
+        the two sides are), and which algorithm/options you used. Attach
+        the files, or a script that generates equivalent ones, if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: measurement
+    attributes:
+      label: Measurement
+      description: >
+        Timing and/or memory numbers, ideally from `benchmarks/bench.py` or
+        a similar script, comparing the two versions/commits.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, CPU - anything that might matter for timing.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
