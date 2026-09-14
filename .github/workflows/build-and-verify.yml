@@ -35,7 +35,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python -c "import os, histodiff; assert os.environ['RELEASE_TAG'] == f'v{histodiff.__version__}'"
+        # Reads __version__ out of the source file rather than importing
+        # histodiff, since this job never installs the package into its own
+        # environment (verify_dist.py and smoke_test_install.sh each use
+        # their own throwaway venvs instead, on purpose).
+        run: |
+          python -c "
+          import os, pathlib, re
+          text = pathlib.Path('src/histodiff/__init__.py').read_text()
+          match = re.search(r'__version__\s*=\s*\"([^\"]+)\"', text)
+          assert match, 'could not find __version__ in src/histodiff/__init__.py'
+          version = match.group(1)
+          tag = os.environ['RELEASE_TAG']
+          assert tag == f'v{version}', f'tag {tag!r} does not match __version__ {version!r}'
+          print(f'OK: tag {tag!r} matches __version__ {version!r}')
+          "
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
