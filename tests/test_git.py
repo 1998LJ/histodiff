@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
+from sysconfig import get_path
 
 from histodiff._git import main
 
@@ -21,8 +21,8 @@ def test_external_diff_renders_git_labels_and_normalizes_status(
 ) -> None:
     old = tmp_path / "old"
     new = tmp_path / "new"
-    old.write_text("before\n", encoding="utf-8")
-    new.write_text("after\n", encoding="utf-8")
+    old.write_bytes(b"before\n")
+    new.write_bytes(b"after\n")
     monkeypatch.delenv("GIT_EXTERNAL_DIFF_TRUST_EXIT_CODE", raising=False)
 
     assert main(protocol(old, new)) == 0
@@ -38,7 +38,7 @@ def test_external_diff_renders_git_labels_and_normalizes_status(
 
 def test_external_diff_handles_added_and_deleted_files(tmp_path: Path, capsys) -> None:
     present = tmp_path / "present"
-    present.write_text("content\n", encoding="utf-8")
+    present.write_bytes(b"content\n")
 
     added = ["new.txt", "/dev/null", ".", ".", str(present), _OID, _MODE]
     assert main(added) == 0
@@ -60,8 +60,8 @@ def test_external_diff_handles_added_and_deleted_files(tmp_path: Path, capsys) -
 def test_external_diff_handles_renames_and_mode_changes(tmp_path: Path, capsys) -> None:
     old = tmp_path / "old"
     new = tmp_path / "new"
-    old.write_text("same\n", encoding="utf-8")
-    new.write_text("same\n", encoding="utf-8")
+    old.write_bytes(b"same\n")
+    new.write_bytes(b"same\n")
     args = [
         "old.py",
         str(old),
@@ -109,7 +109,7 @@ def test_external_diff_reports_unmerged_and_bad_invocations(capsys) -> None:
 
 def test_documented_git_workflow(tmp_path: Path) -> None:
     git = shutil.which("git")
-    adapter = shutil.which("git-histodiff", path=str(Path(sys.executable).parent))
+    adapter = shutil.which("git-histodiff", path=get_path("scripts"))
     assert git is not None, "Git is required for the integration test"
     assert adapter is not None, "install the project before running its tests"
 
@@ -135,26 +135,24 @@ def test_documented_git_workflow(tmp_path: Path) -> None:
     assert run("config", "diff.external", adapter_command).returncode == 0
 
     source = tmp_path / "sample.py"
-    source.write_text(
-        "def first():\n"
-        "    return 1\n\n"
-        "def moved():\n"
-        "    return 'kept'\n\n"
-        "def last():\n"
-        "    return 3\n",
-        encoding="utf-8",
+    source.write_bytes(
+        b"def first():\n"
+        b"    return 1\n\n"
+        b"def moved():\n"
+        b"    return 'kept'\n\n"
+        b"def last():\n"
+        b"    return 3\n"
     )
     assert run("add", "sample.py").returncode == 0
     assert run("commit", "-qm", "initial").returncode == 0
 
-    source.write_text(
-        "def first():\n"
-        "    return 2\n\n"
-        "def last():\n"
-        "    return 3\n\n"
-        "def moved():\n"
-        "    return 'kept'\n",
-        encoding="utf-8",
+    source.write_bytes(
+        b"def first():\n"
+        b"    return 2\n\n"
+        b"def last():\n"
+        b"    return 3\n\n"
+        b"def moved():\n"
+        b"    return 'kept'\n"
     )
 
     working = run("diff", "--", "sample.py")

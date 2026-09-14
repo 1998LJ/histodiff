@@ -184,6 +184,8 @@ def _read(path: str) -> tuple[list[str], str]:
     """Return the file's lines and its modification time for the header."""
     if path == "-":
         return split_lines(sys.stdin.read()), ""
+    if path == os.devnull:
+        return [], ""
     with open(path, encoding="utf-8", errors="replace", newline="") as handle:
         text = handle.read()
     mtime = datetime.fromtimestamp(os.stat(path).st_mtime).astimezone()
