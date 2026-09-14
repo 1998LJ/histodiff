@@ -146,6 +146,7 @@ histodiff algorithm specifically.
 - [API stability](#api-stability)
 - [Choosing an algorithm](#choosing-an-algorithm)
 - [Performance](#performance)
+- [Community and roadmap](#community-and-roadmap)
 
 ### Why histodiff
 
@@ -433,6 +434,10 @@ deliberate differences:
 
 To replace `difflib.unified_diff(a, b)`, use `unified_diff(diff(a, b))`.
 
+[`examples/migrate_from_difflib.py`](https://github.com/rmnvg/histodiff/blob/main/examples/migrate_from_difflib.py)
+runs both migrations - `unified_diff` and `SequenceMatcher` - side by side
+against the same before/after code, on a case difflib is known to get wrong.
+
 ### Command line
 
 ```bash
@@ -643,6 +648,18 @@ output mode.
 - `minimal=True` and `--minimal` disable the search cap. They can take
   quadratic time on large, unrelated inputs and should be used only when a
   smallest edit script matters more than runtime.
+
+## Community and roadmap
+
+[ROADMAP.md](https://github.com/rmnvg/histodiff/blob/main/ROADMAP.md) lists
+what's likely next, honestly and without dates. A few ways to get involved
+beyond filing a bug:
+
+- Pick up a
+  [`good first issue`](https://github.com/rmnvg/histodiff/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- Hit a diff that came out confusing or wrong-looking, from histodiff or
+  anything else? [Share it](https://github.com/rmnvg/histodiff/issues/4) -
+  real examples like this become permanent regression tests.
 
 ## Contributing
 
