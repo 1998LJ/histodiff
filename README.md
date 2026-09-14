@@ -62,6 +62,8 @@ are in [Real-world corpus](#real-world-corpus).
 pip install histodiff
 ```
 
+[View histodiff on PyPI](https://pypi.org/project/histodiff/)
+
 Requires Python 3.9+. No dependencies.
 
 ## Quick start
