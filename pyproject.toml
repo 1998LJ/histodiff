@@ -41,6 +41,7 @@ Repository = "https://github.com/rmnvg/histodiff.git"
 
 [project.scripts]
 histodiff = "histodiff.cli:main"
+git-histodiff = "histodiff._git:main"
 
 [tool.hatch.version]
 path = "src/histodiff/__init__.py"

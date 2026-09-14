@@ -19,6 +19,7 @@ alignment while preserving the public data model and valid edit operations.
 - Whitespace-aware comparison and blank-line filtering.
 - A `difflib.SequenceMatcher`-compatible API and support for generic sequences.
 - A dependency-free command-line interface.
+- A `git-histodiff` adapter for repository, staged, and commit diffs.
 
 [Unreleased]: https://github.com/rmnvg/histodiff/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/rmnvg/histodiff/releases/tag/v0.1.0

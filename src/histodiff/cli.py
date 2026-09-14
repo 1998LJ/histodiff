@@ -487,7 +487,11 @@ def render_side_by_side(
             yield line.rstrip(" ") + "\n"
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    _labels: tuple[str, str] | None = None,
+) -> int:
     args = build_parser().parse_args(argv)
     if args.file1 == args.file2 == "-":
         print("histodiff: standard input may only be specified once", file=sys.stderr)
@@ -499,6 +503,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         name = exc.filename if exc.filename is not None else ""
         print(f"histodiff: {name}: {exc.strerror or exc}", file=sys.stderr)
         return 2
+
+    fromfile, tofile = _labels or (args.file1, args.file2)
+    if _labels is not None:
+        # Git's paths are meaningful to readers; temporary-file mtimes are not.
+        a_date = b_date = ""
 
     key: Callable[[str], str] | None = None
     if args.ignore_all_space:
@@ -526,8 +535,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         chunks = [
             to_json(
                 ops,
-                fromfile=args.file1,
-                tofile=args.file2,
+                fromfile=fromfile,
+                tofile=tofile,
                 algorithm=args.algorithm,
                 moves=moves,
                 ignore_blank_lines=args.ignore_blank_lines,
@@ -539,8 +548,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         chunks = [
             html_diff(
                 ops,
-                fromfile=args.file1,
-                tofile=args.file2,
+                fromfile=fromfile,
+                tofile=tofile,
                 context=args.context,
                 moves=moves,
                 ignore_blank_lines=args.ignore_blank_lines,
@@ -566,8 +575,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             unified_diff(
                 ops,
                 args.context,
-                fromfile=args.file1,
-                tofile=args.file2,
+                fromfile=fromfile,
+                tofile=tofile,
                 fromfiledate=a_date,
                 tofiledate=b_date,
                 ignore_blank_lines=args.ignore_blank_lines,
