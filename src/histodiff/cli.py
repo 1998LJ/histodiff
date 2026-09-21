@@ -538,8 +538,9 @@ def main(
     )
     changed = any(op.tag != "equal" and op.as_opcode() not in ignored for op in ops)
 
-    show_moves = args.color_moved or args.dim_moved
-    color = args.color or show_moves
+    no_color = bool(os.environ.get("NO_COLOR"))
+    show_moves = (args.color_moved or args.dim_moved) and not no_color
+    color = (args.color or show_moves) and not no_color
     # Match moved lines the same way the diff matched lines. JSON always
     # includes them, since it's data for other tools.
     moves = find_moves(ops, key=key) if show_moves or args.json else []
@@ -578,7 +579,7 @@ def main(
             color,
             args.algorithm,
             moves,
-            args.dim_moved,
+            args.dim_moved and not no_color,
             args.ignore_blank_lines,
             args.context,
         )
@@ -596,8 +597,16 @@ def main(
                 ignore_blank_lines=args.ignore_blank_lines,
             )
         )
-        mode = "words" if args.color_words else "color" if color else "plain"
-        chunks = render(lines, mode, args.algorithm, moves, args.dim_moved)
+        mode = (
+            "words"
+            if args.color_words and not no_color
+            else "color"
+            if color
+            else "plain"
+        )
+        chunks = render(
+            lines, mode, args.algorithm, moves, args.dim_moved and not no_color
+        )
 
     try:
         for chunk in chunks:
