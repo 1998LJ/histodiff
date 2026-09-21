@@ -461,6 +461,9 @@ histodiff old.py new.py --minimal                 # smallest diff, however long 
 cat new.py | histodiff old.py -                   # '-' reads stdin
 ```
 
+Set `NO_COLOR` to any non-empty value to force plain terminal output, even
+when a color-related flag is passed.
+
 `-i` / `--ignore-case` compares lines using Unicode case folding, so `Straße`
 and `STRASSE` compare equal. Combine it with `-b` or `-w` to ignore whitespace
 differences too. Output retains the original text, and moved-block detection
