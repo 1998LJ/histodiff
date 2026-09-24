@@ -240,6 +240,7 @@ def test_ignore_case_keeps_real_changes(tmp_path, capsys, flags) -> None:
     assert "before" in output
     assert "after" in output
 
+
 @pytest.mark.parametrize(
     "flag", ["--color", "--color-words", "--color-moved", "--dim-moved"]
 )
@@ -264,4 +265,3 @@ def test_empty_no_color_environment_does_not_disable_color(
     assert main([*files, "--color"]) == 1
     out, _ = capsys.readouterr()
     assert "\x1b[" in out
-
